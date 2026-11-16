@@ -397,7 +397,7 @@ def test_current_main_static_check():
         cell = line.split("|")[7].strip().strip("`")
         assert len(cell) >= 7 and base.startswith(cell), line
     old_rows = report["summary_rows_on_old_commit"]
-    if MOD._commit_is_head(base, report["head"]):
+    if MOD._commit_is_current(ROOT, base, report["head"]):
         assert old_rows == []
         assert "commits-current" in _ids(report, "passed")
     else:
@@ -413,3 +413,44 @@ def test_current_main_static_check():
     assert "g2-pillar-bspline.json" in names
     assert "crossing-forest-dense-bspline.json" in names
     assert "swap-3-geom-fallback.json" in names
+
+
+def test_docs_only_advance_keeps_commits_current_until_code_changes(tmp_path):
+    import subprocess
+
+    root = make_tree(tmp_path)
+    git = lambda *args: subprocess.run(
+        ["git", *args], cwd=root, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    git("init", "-q")
+    git("config", "user.name", "test")
+    git("config", "user.email", "test@example.com")
+    git("add", ".")
+    git("commit", "-q", "-m", "code base")
+    c_code = git("rev-parse", "HEAD")
+
+    make_tree(root, commit=c_code)
+    (root / "docs/LIMITATIONS.md").write_text("见 [总表](results/SUMMARY.md)。刷新说明。\n", encoding="utf-8")
+    git("add", "docs")
+    git("commit", "-q", "-m", "docs refresh")
+    c_docs = git("rev-parse", "HEAD")
+    assert c_docs != c_code
+
+    fresh = MOD.audit(root)
+    assert fresh["exit_code"] == 0
+    assert fresh["counts"]["hard"] == 0
+    assert fresh["counts"]["refresh"] == 0
+    assert "commits-current" in _ids(fresh, "passed")
+
+    (root / "yopo_l0/runner.py").write_text(
+        'class RunConfig:\n    policy: str = "upstream"\n    shadow: bool = True\n# code touched\n',
+        encoding="utf-8",
+    )
+    git("add", "yopo_l0/runner.py")
+    git("commit", "-q", "-m", "touch yopo_l0")
+
+    stale = MOD.audit(root)
+    assert stale["exit_code"] == 0
+    assert stale["counts"]["hard"] == 0
+    assert stale["counts"]["refresh"] == 1
+    assert "stale-commits" in _ids(stale, "refresh")

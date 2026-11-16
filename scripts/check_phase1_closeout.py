@@ -147,6 +147,45 @@ def _commit_is_head(cited: str, head: str | None) -> bool:
     return head_l.startswith(cited_l) or cited_l.startswith(head_l)
 
 
+def _docs_only_since(root: Path, cited: str, head: str | None) -> bool:
+    if not cited or head is None or not HEX_RE.fullmatch(cited) or len(cited) < 7:
+        return False
+    if not (root / ".git").exists():
+        return False
+    try:
+        resolved = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{cited}^{{commit}}"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if resolved.returncode != 0:
+            return False
+        full_cited = resolved.stdout.strip()
+        anc = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", full_cited, head],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+        if anc.returncode != 0:
+            return False
+        diff = subprocess.run(
+            ["git", "diff", "--quiet", f"{full_cited}..{head}", "--", ".", ":(exclude)docs"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+        return diff.returncode == 0
+    except OSError:
+        return False
+
+
+def _commit_is_current(root: Path, cited: str, head: str | None) -> bool:
+    return _commit_is_head(cited, head) or _docs_only_since(root, cited, head)
+
+
 def _is_stale_example(cited: str) -> bool:
     return cited.lower().startswith(STALE_EXAMPLE_PREFIX)
 
@@ -762,7 +801,7 @@ def _check_docs(root: Path, head: str | None, passed: list[dict], refresh: list[
                 }
             )
         commit_full = json_commit if _commit_is_head(cited_commit, json_commit) or _hash_prefix(json_commit, cited_commit) else cited_commit
-        on_head = _commit_is_head(cited_commit, head)
+        on_head = _commit_is_current(root, cited_commit, head)
         if not on_head:
             old_rows.append(
                 {
@@ -823,7 +862,7 @@ def _check_docs(root: Path, head: str | None, passed: list[dict], refresh: list[
                 if "commit" not in label.lower():
                     continue
                 token = _code(row.get("值", ""))
-                if not HEX_RE.fullmatch(token) or _commit_is_head(token, head):
+                if not HEX_RE.fullmatch(token) or _commit_is_current(root, token, head):
                     continue
                 video_rows.append(
                     {
@@ -842,7 +881,7 @@ def _check_docs(root: Path, head: str | None, passed: list[dict], refresh: list[
         scene_key = next((key for key in keys if "场景" in key), None)
         for row in table:
             token = _code(row.get(commit_key, ""))
-            if not HEX_RE.fullmatch(token) or _commit_is_head(token, head):
+            if not HEX_RE.fullmatch(token) or _commit_is_current(root, token, head):
                 continue
             video_rows.append(
                 {
@@ -865,13 +904,13 @@ def _check_docs(root: Path, head: str | None, passed: list[dict], refresh: list[
     for token in re.findall(r"\bgit checkout\s+([0-9a-fA-F]{7,40})", md_text):
         if token not in checkout:
             checkout.append(token)
-    if old_rows or video_rows or any(not _commit_is_head(token, head) for token in prose_commits + checkout):
+    if old_rows or video_rows or any(not _commit_is_current(root, token, head) for token in prose_commits + checkout):
         stale_n = sum(1 for row in old_rows if row["matches_stale_example"])
         detail = (
             f"SUMMARY.md 总表有 {len(old_rows)} 行的 commit 不是当前 HEAD"
             f"（其中 {stale_n} 行匹配旧提交示例 {STALE_EXAMPLE_PREFIX}）。"
         )
-        if json_commit and not _commit_is_head(json_commit, head):
+        if json_commit and not _commit_is_current(root, json_commit, head):
             detail += f"SUMMARY.json 的 commit 是 `{json_commit}`。"
         if prose_commits or checkout:
             detail += "正文或复现命令还引用了 " + "、".join(f"`{token}`" for token in prose_commits + checkout) + "。"
