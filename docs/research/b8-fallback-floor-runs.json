@@ -1,0 +1,1416 @@
+{
+  "ticket": "B8",
+  "title": "票 B8：柱净空门全拒退路地板与起步斜坡组合（默认关，只报数）",
+  "disclaimer": "只报数。所有研究开关（pillar_clearance_m、pillar_fallback_min_m、launch_a_max_mps2、ref_ramp_mps2、center_ramp_mps2）默认关。打开柱门/地板即偏离上游（读场景柱几何）。每趟 SITL px4_parameters_written 都是空列表，lockstep.engaged=true，使用每趟隔离 Docker 网络。",
+  "switch": {
+    "key": "policy_params.b3.pillar_fallback_min_m",
+    "sitl_fix": "floor=<m>（或 pillar=<m>:<floor>，需与 pillar=<m> 同开且 0 < floor <= pillar）",
+    "default": "off",
+    "behavior": "一批候选全被柱门拒绝时，若离柱最远候选的保守净空 gap 仍低于 pillar_fallback_min_m，不交 PILLAR_FALLBACK，改走运动学刹车（BRAKE_ONLY）或保持上一份已提交计划（CLEARANCE_SKIP）"
+  },
+  "l0": {
+    "started_at": "2026-11-16T07:46:31-0400",
+    "finished_at": "2026-11-16T07:52:38-0400",
+    "reframp_traj_identical_to_a": true,
+    "arms": {
+      "d": {
+        "fix": "",
+        "label": "缺省",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 10,
+        "collisions": 0,
+        "t_mean": 7.27,
+        "t_min": 7.05,
+        "t_max": 7.77,
+        "form_p95_max": 4.609516171086577,
+        "form_p95_per_seed": [
+          4.61,
+          4.342,
+          4.471,
+          4.139,
+          4.205,
+          4.149,
+          4.249,
+          4.13,
+          4.498,
+          4.202
+        ],
+        "min_obs_dist": 0.878,
+        "min_inter_dist": 3.35,
+        "dev": false,
+        "checks": 0,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": []
+      },
+      "a": {
+        "fix": "launch=3:1.5",
+        "label": "(a) launch=3:1.5",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 6,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.75,
+        "t_max": 7.79,
+        "form_p95_max": 6.288843444469379,
+        "form_p95_per_seed": [
+          5.964,
+          6.13,
+          5.958,
+          5.975,
+          5.962,
+          6.009,
+          6.289,
+          5.966,
+          5.985,
+          6.13
+        ],
+        "min_obs_dist": 1.209,
+        "min_inter_dist": 3.03,
+        "dev": false,
+        "checks": 0,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": [
+          [
+            1,
+            [
+              "seed 1 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ],
+          [
+            5,
+            [
+              "seed 5 formation_error_p95_m 6.009 > 6.000"
+            ]
+          ],
+          [
+            6,
+            [
+              "seed 6 formation_error_p95_m 6.289 > 6.000"
+            ]
+          ],
+          [
+            9,
+            [
+              "seed 9 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ]
+        ]
+      },
+      "ap3_f2": {
+        "fix": "launch=3:1.5,pillar=0.3,floor=0.2",
+        "label": "(a)+柱门 0.3 m+地板 0.2 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 6,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.75,
+        "t_max": 7.79,
+        "form_p95_max": 6.288843444469379,
+        "form_p95_per_seed": [
+          5.964,
+          6.13,
+          5.958,
+          5.975,
+          5.962,
+          6.009,
+          6.289,
+          5.966,
+          5.985,
+          6.13
+        ],
+        "min_obs_dist": 1.209,
+        "min_inter_dist": 3.03,
+        "dev": true,
+        "checks": 395,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": [
+          [
+            1,
+            [
+              "seed 1 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ],
+          [
+            5,
+            [
+              "seed 5 formation_error_p95_m 6.009 > 6.000"
+            ]
+          ],
+          [
+            6,
+            [
+              "seed 6 formation_error_p95_m 6.289 > 6.000"
+            ]
+          ],
+          [
+            9,
+            [
+              "seed 9 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ]
+        ]
+      },
+      "ap5_f3": {
+        "fix": "launch=3:1.5,pillar=0.5,floor=0.3",
+        "label": "(a)+柱门 0.5 m+地板 0.3 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 6,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.75,
+        "t_max": 7.79,
+        "form_p95_max": 6.288843444469379,
+        "form_p95_per_seed": [
+          5.964,
+          6.13,
+          5.958,
+          5.975,
+          5.962,
+          6.009,
+          6.289,
+          5.966,
+          5.985,
+          6.13
+        ],
+        "min_obs_dist": 1.209,
+        "min_inter_dist": 3.03,
+        "dev": true,
+        "checks": 395,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": [
+          [
+            1,
+            [
+              "seed 1 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ],
+          [
+            5,
+            [
+              "seed 5 formation_error_p95_m 6.009 > 6.000"
+            ]
+          ],
+          [
+            6,
+            [
+              "seed 6 formation_error_p95_m 6.289 > 6.000"
+            ]
+          ],
+          [
+            9,
+            [
+              "seed 9 formation_error_p95_m 6.130 > 6.000"
+            ]
+          ]
+        ]
+      },
+      "a_reframp_p3_f2": {
+        "fix": "launch=3:1.5,reframp=3,pillar=0.3,floor=0.2",
+        "label": "(a)+参考斜坡 3+柱门 0.3 m+地板 0.2 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 10,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.75,
+        "t_max": 7.79,
+        "form_p95_max": 4.409538068256527,
+        "form_p95_per_seed": [
+          4.052,
+          4.232,
+          4.042,
+          4.125,
+          4.109,
+          4.139,
+          4.41,
+          4.114,
+          4.075,
+          4.228
+        ],
+        "min_obs_dist": 1.209,
+        "min_inter_dist": 3.03,
+        "dev": true,
+        "checks": 395,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": []
+      },
+      "a_reframp_p5_f3": {
+        "fix": "launch=3:1.5,reframp=3,pillar=0.5,floor=0.3",
+        "label": "(a)+参考斜坡 3+柱门 0.5 m+地板 0.3 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 10,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.75,
+        "t_max": 7.79,
+        "form_p95_max": 4.409538068256527,
+        "form_p95_per_seed": [
+          4.052,
+          4.232,
+          4.042,
+          4.125,
+          4.109,
+          4.139,
+          4.41,
+          4.114,
+          4.075,
+          4.228
+        ],
+        "min_obs_dist": 1.209,
+        "min_inter_dist": 3.03,
+        "dev": true,
+        "checks": 395,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": []
+      },
+      "a_ramp_p3_f2": {
+        "fix": "launch=3:1.5,ramp=3,pillar=0.3,floor=0.2",
+        "label": "(a)+中心斜坡 3+柱门 0.3 m+地板 0.2 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 10,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.74,
+        "t_max": 7.78,
+        "form_p95_max": 4.306185832105046,
+        "form_p95_per_seed": [
+          4.095,
+          4.134,
+          4.306,
+          4.169,
+          4.159,
+          4.145,
+          3.731,
+          3.824,
+          4.257,
+          3.995
+        ],
+        "min_obs_dist": 1.003,
+        "min_inter_dist": 2.965,
+        "dev": true,
+        "checks": 390,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": []
+      },
+      "a_ramp_p5_f3": {
+        "fix": "launch=3:1.5,ramp=3,pillar=0.5,floor=0.3",
+        "label": "(a)+中心斜坡 3+柱门 0.5 m+地板 0.3 m",
+        "n": 10,
+        "success": 10,
+        "gates_pass_n": 10,
+        "collisions": 0,
+        "t_mean": 7.76,
+        "t_min": 7.74,
+        "t_max": 7.78,
+        "form_p95_max": 4.306185832105046,
+        "form_p95_per_seed": [
+          4.095,
+          4.134,
+          4.306,
+          4.169,
+          4.159,
+          4.145,
+          3.731,
+          3.824,
+          4.257,
+          3.995
+        ],
+        "min_obs_dist": 1.003,
+        "min_inter_dist": 2.965,
+        "dev": true,
+        "checks": 390,
+        "rej": 0,
+        "fallbacks": 0,
+        "floor_blocked": 0,
+        "fails": []
+      }
+    }
+  },
+  "sitl": {
+    "a_reframp_p5_f3": {
+      "fix": "launch=3:1.5,reframp=3,pillar=0.5,floor=0.3",
+      "label": "(a)+参考斜坡 3+柱门 0.5 m+地板 0.3 m",
+      "agg": {
+        "n": 10,
+        "success": 8,
+        "arrived": 28,
+        "collisions": 0,
+        "plan_timeouts": 2,
+        "t_med": 10.32,
+        "t_min": 10.16,
+        "t_max": 17.24,
+        "lat_med": 0.814,
+        "lat_min": 0.537,
+        "lat_max": 1.174,
+        "form_p95_med": 4.412,
+        "form_p95_max": 16.802,
+        "sp_min": 0.6384,
+        "checks_total": 999,
+        "rejected_total": 467,
+        "fallbacks_total": 1,
+        "floor_blocked_total": 75,
+        "fails": [
+          [
+            2,
+            "uav1:PLAN_TIMEOUT",
+            0.267
+          ],
+          [
+            9,
+            "uav1:PLAN_TIMEOUT",
+            0.478
+          ]
+        ],
+        "px4_clean": true,
+        "lockstep": true,
+        "fallback_trips": [
+          [
+            9,
+            "FAIL",
+            460,
+            1,
+            75,
+            0.6384
+          ]
+        ],
+        "floor_blocked_trips": [
+          [
+            9,
+            "FAIL",
+            "uav1:PLAN_TIMEOUT",
+            460,
+            75,
+            {
+              "ARRIVED_HOLD": 146,
+              "BRAKE_ONLY": 1,
+              "CLEARANCE_SKIP": 74,
+              "OK": 16,
+              "PILLAR_FALLBACK": 1,
+              "YOPO_ALT": 2
+            }
+          ]
+        ],
+        "lockstep_timeout_retries": []
+      },
+      "rows": [
+        {
+          "seed": 0,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T081013-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.280000000000005,
+          "form_p95": 4.4149631178492195,
+          "plan_m": 0.27,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 2.454,
+          "lat_p95": 0.858,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8126,
+          "plan_clear_min": 0.7605,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 43,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 1,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T081215-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 17.240000000000002,
+          "form_p95": 4.27479753383476,
+          "plan_m": 0.413,
+          "flight_m": 0.0,
+          "min_inter_plan_m": 6.088,
+          "lat_p95": 0.882,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.49,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.9298,
+          "plan_clear_min": 0.2829,
+          "decisions": {
+            "ARRIVED_HOLD": 41,
+            "OK": 32
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 56,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 2,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T081354-yopo-n3",
+          "outcome": "FAIL",
+          "reason": "uav1:PLAN_TIMEOUT",
+          "arrived": 2,
+          "collisions": 0,
+          "t_arr": null,
+          "form_p95": 3.2755845361896654,
+          "plan_m": 0.267,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 1.409,
+          "lat_p95": 1.053,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.46,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8373,
+          "plan_clear_min": 0.8015,
+          "decisions": {
+            "ARRIVED_HOLD": 142,
+            "CONFLICT_SKIP": 1,
+            "OK": 91,
+            "YOPO_ALT": 2
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 122,
+            "rejected": 1,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 3,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T081954-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.16,
+          "form_p95": 4.005382237553121,
+          "plan_m": 0.601,
+          "flight_m": 0.005,
+          "min_inter_plan_m": 2.774,
+          "lat_p95": 0.769,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.47,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8332,
+          "plan_clear_min": 0.8334,
+          "decisions": {
+            "ARRIVED_HOLD": 24,
+            "OK": 20,
+            "YOPO_ALT": 1
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 46,
+            "rejected": 1,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 4,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T082246-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.280000000000001,
+          "form_p95": 4.5285253645387415,
+          "plan_m": 0.797,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 6.777,
+          "lat_p95": 1.174,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.49,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8885,
+          "plan_clear_min": 0.8694,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 45,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 5,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T082413-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.459999999999997,
+          "form_p95": 3.744619340867927,
+          "plan_m": 0.328,
+          "flight_m": 0.0,
+          "min_inter_plan_m": 7.699,
+          "lat_p95": 0.537,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.87,
+          "plan_clear_min": 0.7041,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 45,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 6,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T082534-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.36,
+          "form_p95": 4.574647685512945,
+          "plan_m": 0.195,
+          "flight_m": 0.006,
+          "min_inter_plan_m": 7.163,
+          "lat_p95": 0.71,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.5,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.793,
+          "plan_clear_min": 0.7708,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 19,
+            "YOPO_ALT": 2
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 50,
+            "rejected": 5,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 7,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T082851-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.259999999999998,
+          "form_p95": 4.408229110552095,
+          "plan_m": 0.669,
+          "flight_m": 0.005,
+          "min_inter_plan_m": 7.542,
+          "lat_p95": 0.629,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.52,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8442,
+          "plan_clear_min": 0.7534,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 43,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 8,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T083210-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 16.900000000000002,
+          "form_p95": 4.877696877727789,
+          "plan_m": 0.975,
+          "flight_m": 0.004,
+          "min_inter_plan_m": 4.595,
+          "lat_p95": 0.868,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.5,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8156,
+          "plan_clear_min": 0.816,
+          "decisions": {
+            "ARRIVED_HOLD": 40,
+            "OK": 32
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 54,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 9,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p5_f3/runs/20261116T083546-yopo-n3",
+          "outcome": "FAIL",
+          "reason": "uav1:PLAN_TIMEOUT",
+          "arrived": 2,
+          "collisions": 0,
+          "t_arr": null,
+          "form_p95": 16.802390378743635,
+          "plan_m": 0.478,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 5.867,
+          "lat_p95": 0.576,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.49,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.5 m",
+            "偏离上游：柱净空全拒退路地板 0.3 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.6384,
+          "plan_clear_min": 0.6384,
+          "decisions": {
+            "ARRIVED_HOLD": 146,
+            "BRAKE_ONLY": 1,
+            "CLEARANCE_SKIP": 74,
+            "OK": 16,
+            "PILLAR_FALLBACK": 1,
+            "YOPO_ALT": 2
+          },
+          "pillar": {
+            "margin_m": 0.5,
+            "checks": 495,
+            "rejected": 460,
+            "fallbacks": 1,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.3 m）",
+            "fallback_min_m": 0.3,
+            "floor_blocked": 75
+          }
+        }
+      ],
+      "started_at": "2026-11-16T08:10:13-0400",
+      "finished_at": "2026-11-16T08:38:46-0400"
+    },
+    "a_reframp_p3_f2": {
+      "fix": "launch=3:1.5,reframp=3,pillar=0.3,floor=0.2",
+      "label": "(a)+参考斜坡 3+柱门 0.3 m+地板 0.2 m",
+      "agg": {
+        "n": 10,
+        "success": 9,
+        "arrived": 29,
+        "collisions": 0,
+        "plan_timeouts": 1,
+        "t_med": 12.3,
+        "t_min": 10.22,
+        "t_max": 19.02,
+        "lat_med": 0.784,
+        "lat_min": 0.551,
+        "lat_max": 1.239,
+        "form_p95_med": 4.475,
+        "form_p95_max": 10.425,
+        "sp_min": 0.4369,
+        "checks_total": 586,
+        "rejected_total": 36,
+        "fallbacks_total": 1,
+        "floor_blocked_total": 4,
+        "fails": [
+          [
+            6,
+            "uav0:PLAN_TIMEOUT",
+            0.097
+          ]
+        ],
+        "px4_clean": true,
+        "lockstep": true,
+        "fallback_trips": [
+          [
+            7,
+            "SUCCESS",
+            21,
+            1,
+            2,
+            0.4369
+          ]
+        ],
+        "floor_blocked_trips": [
+          [
+            0,
+            "SUCCESS",
+            "GOAL_REACHED_AND_HELD",
+            15,
+            2,
+            {
+              "ARRIVED_HOLD": 29,
+              "BRAKE_ONLY": 1,
+              "CLEARANCE_SKIP": 1,
+              "OK": 21,
+              "YOPO_ALT": 1
+            }
+          ],
+          [
+            7,
+            "SUCCESS",
+            "GOAL_REACHED_AND_HELD",
+            21,
+            2,
+            {
+              "ARRIVED_HOLD": 29,
+              "BRAKE_ONLY": 1,
+              "CLEARANCE_SKIP": 1,
+              "OK": 21,
+              "PILLAR_FALLBACK": 1,
+              "YOPO_ALT": 1
+            }
+          ]
+        ],
+        "lockstep_timeout_retries": []
+      },
+      "rows": [
+        {
+          "seed": 0,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T084026-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 12.020000000000003,
+          "form_p95": 10.425231428401158,
+          "plan_m": 0.493,
+          "flight_m": 0.0,
+          "min_inter_plan_m": 5.351,
+          "lat_p95": 0.694,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.5,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.7791,
+          "plan_clear_min": 0.6393,
+          "decisions": {
+            "ARRIVED_HOLD": 29,
+            "BRAKE_ONLY": 1,
+            "CLEARANCE_SKIP": 1,
+            "OK": 21,
+            "YOPO_ALT": 1
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 62,
+            "rejected": 15,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 2
+          }
+        },
+        {
+          "seed": 1,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T084406-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 16.779999999999998,
+          "form_p95": 4.481630613038883,
+          "plan_m": 0.28,
+          "flight_m": 0.0,
+          "min_inter_plan_m": 1.757,
+          "lat_p95": 0.904,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.49,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.799,
+          "plan_clear_min": 0.7618,
+          "decisions": {
+            "ARRIVED_HOLD": 40,
+            "OK": 31,
+            "YOPO_ALT": 1
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 61,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 2,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T084742-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.5,
+          "form_p95": 4.23959077038342,
+          "plan_m": 0.568,
+          "flight_m": 0.002,
+          "min_inter_plan_m": 6.41,
+          "lat_p95": 0.745,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.5,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.9829,
+          "plan_clear_min": 0.9611,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 22
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 46,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 3,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T085110-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 12.3,
+          "form_p95": 4.121607082409409,
+          "plan_m": 0.667,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 2.754,
+          "lat_p95": 0.885,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.7962,
+          "plan_clear_min": 0.7567,
+          "decisions": {
+            "ARRIVED_HOLD": 33,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 41,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 4,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T085438-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 19.02,
+          "form_p95": 4.74314593774163,
+          "plan_m": 0.941,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 5.033,
+          "lat_p95": 1.239,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.49,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.9242,
+          "plan_clear_min": 0.9241,
+          "decisions": {
+            "ARRIVED_HOLD": 47,
+            "OK": 34
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 58,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 5,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T085821-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.219999999999995,
+          "form_p95": 4.468364815656497,
+          "plan_m": 0.151,
+          "flight_m": 0.002,
+          "min_inter_plan_m": 7.152,
+          "lat_p95": 0.666,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.7688,
+          "plan_clear_min": 0.7689,
+          "decisions": {
+            "ARRIVED_HOLD": 24,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 43,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 6,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T090134-yopo-n3",
+          "outcome": "FAIL",
+          "reason": "uav0:PLAN_TIMEOUT",
+          "arrived": 2,
+          "collisions": 0,
+          "t_arr": null,
+          "form_p95": 2.9208909107332324,
+          "plan_m": 0.097,
+          "flight_m": 0.004,
+          "min_inter_plan_m": 5.076,
+          "lat_p95": 0.554,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.47,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.7368,
+          "plan_clear_min": 0.7361,
+          "decisions": {
+            "ARRIVED_HOLD": 146,
+            "OK": 94
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 110,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 7,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T090635-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 12.419999999999998,
+          "form_p95": 9.833249996257665,
+          "plan_m": 0.174,
+          "flight_m": 0.006,
+          "min_inter_plan_m": 6.398,
+          "lat_p95": 0.551,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.5,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.4369,
+          "plan_clear_min": 0.4369,
+          "decisions": {
+            "ARRIVED_HOLD": 29,
+            "BRAKE_ONLY": 1,
+            "CLEARANCE_SKIP": 1,
+            "OK": 21,
+            "PILLAR_FALLBACK": 1,
+            "YOPO_ALT": 1
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 66,
+            "rejected": 21,
+            "fallbacks": 1,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 2
+          }
+        },
+        {
+          "seed": 8,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T090951-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 10.279999999999998,
+          "form_p95": 4.360214452452424,
+          "plan_m": 0.606,
+          "flight_m": 0.001,
+          "min_inter_plan_m": 7.108,
+          "lat_p95": 0.823,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.8409,
+          "plan_clear_min": 0.8417,
+          "decisions": {
+            "ARRIVED_HOLD": 25,
+            "OK": 21
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 45,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        },
+        {
+          "seed": 9,
+          "run_dir": "/workspace/yopo-ops/b8/sitl/a_reframp_p3_f2/runs/20261116T091301-yopo-n3",
+          "outcome": "SUCCESS",
+          "reason": "GOAL_REACHED_AND_HELD",
+          "arrived": 3,
+          "collisions": 0,
+          "t_arr": 16.740000000000002,
+          "form_p95": 4.512961242136121,
+          "plan_m": 0.642,
+          "flight_m": 0.002,
+          "min_inter_plan_m": 5.362,
+          "lat_p95": 0.909,
+          "b3": {
+            "launch_plans": 6,
+            "launch_scaled": 36,
+            "launch_uncapped": 0,
+            "replan_lateral": 0
+          },
+          "px4": [],
+          "rtf": 0.51,
+          "dev": [
+            "偏离上游：场景柱几何辅助的规划净空过滤 0.3 m",
+            "偏离上游：柱净空全拒退路地板 0.2 m",
+            "偏离上游：起步 1.5 s 内计划加速度上限 3 m/s²",
+            "偏离上游：编队误差参考起步按 3 m/s² 斜坡（规划时刻表不变）"
+          ],
+          "lockstep": true,
+          "sp_min": 0.7745,
+          "plan_clear_min": 0.7712,
+          "decisions": {
+            "ARRIVED_HOLD": 39,
+            "OK": 32
+          },
+          "pillar": {
+            "margin_m": 0.3,
+            "checks": 54,
+            "rejected": 0,
+            "fallbacks": 0,
+            "source": "scene p_ boxes (oracle)",
+            "deviation": "偏离上游：场景柱几何辅助的规划净空过滤；全拒时退回离柱最远候选（地板 0.2 m）",
+            "fallback_min_m": 0.2,
+            "floor_blocked": 0
+          }
+        }
+      ],
+      "started_at": "2026-11-16T08:38:46-0400",
+      "finished_at": "2026-11-16T09:14:36-0400"
+    }
+  }
+}

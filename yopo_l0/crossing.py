@@ -389,10 +389,23 @@ def _read_b3(params: dict | None, a_max: float) -> dict:
             raise ValueError("policy_params.b3.ref_ramp_mps2 与 center_ramp_mps2 只能开一个")
         out["ref_ramp_mps2"] = ref
     if raw.get("pillar_clearance_m") is not None:
+        if isinstance(raw["pillar_clearance_m"], bool):
+            raise ValueError("policy_params.b3.pillar_clearance_m 要有限且为正")
         gap = float(raw["pillar_clearance_m"])
         if not (math.isfinite(gap) and gap > 0.0):
             raise ValueError("policy_params.b3.pillar_clearance_m 要有限且为正")
         out["pillar_clearance_m"] = gap
+    if raw.get("pillar_fallback_min_m") is not None:
+        if isinstance(raw["pillar_fallback_min_m"], bool):
+            raise ValueError("policy_params.b3.pillar_fallback_min_m 要有限且为正")
+        floor = float(raw["pillar_fallback_min_m"])
+        if not (math.isfinite(floor) and floor > 0.0):
+            raise ValueError("policy_params.b3.pillar_fallback_min_m 要有限且为正")
+        if "pillar_clearance_m" not in out:
+            raise ValueError("policy_params.b3.pillar_fallback_min_m 需要与 pillar_clearance_m 一起开")
+        if floor > out["pillar_clearance_m"] + 1e-12:
+            raise ValueError("policy_params.b3.pillar_fallback_min_m 不能大于 pillar_clearance_m")
+        out["pillar_fallback_min_m"] = floor
     return out
 
 
@@ -469,7 +482,10 @@ class CrossingFleet:
             from .pillar_clearance import PillarClearance
 
             self.pillar_clearance = PillarClearance(
-                card.get("geometry") or {}, self.b3["pillar_clearance_m"], self.radius
+                card.get("geometry") or {},
+                self.b3["pillar_clearance_m"],
+                self.radius,
+                fallback_min_m=self.b3.get("pillar_fallback_min_m"),
             )
         # 林带默认门控。柱林没有 forest，默认开环。卡上的布尔盖过默认。
         self.progress_gate, self.progress_percentile = read_progress_settings(
@@ -1331,11 +1347,12 @@ class CrossingFleet:
                 used_alt = i > 0
                 break
         if occ is None and self.pillar_clearance is not None and skipped and len(skipped) == len(motions):
-            best = self.pillar_clearance.farthest(skipped, self.pcfg.limits.v_max)
-            occ, reject = self._as_plan(node, t_start, head, best)
-            if occ is not None:
-                used_fallback = True
-                self.pillar_clearance.fallbacks += 1
+            best = self.pillar_clearance.fallback(skipped, self.pcfg.limits.v_max)
+            if best is not None:
+                occ, reject = self._as_plan(node, t_start, head, best)
+                if occ is not None:
+                    used_fallback = True
+                    self.pillar_clearance.fallbacks += 1
         return occ, reject, used_alt, used_fallback
 
     def _emit(self, bus, now: float, src: str, msg) -> None:
