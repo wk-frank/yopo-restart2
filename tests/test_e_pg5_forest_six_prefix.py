@@ -195,3 +195,33 @@ def test_script_contract_and_relative_p95_helper():
         ticks.append({"t": t, "uav": "uav0", "p": [20.0 + k * 0.1, -1.0, 1.5], "v": [1, 0, 0], "goal_error_m": 5.0})
         ticks.append({"t": t, "uav": "uav1", "p": [20.0 + k * 0.1, 1.0, 1.5], "v": [1, 0, 0], "goal_error_m": 5.0})
     assert mod.relative_formation_p95(ticks, slots) == pytest.approx(0.0, abs=1e-9)
+
+
+def test_recorded_runs_and_markdown_invariants():
+    doc_json = ROOT / "docs/research/e-pg5-forest-six-prefix-runs.json"
+    doc_md = ROOT / "docs/research/e-pg5-forest-six-prefix.md"
+    assert doc_json.is_file() and doc_md.is_file()
+    payload = json.loads(doc_json.read_text(encoding="utf-8"))
+    md_text = doc_md.read_text(encoding="utf-8")
+    assert payload["ticket"] == "E-PG5"
+    assert payload["report_only"] is True
+    assert payload["m2_bit_identical"] is True
+    assert len(payload["rows"]) == 60
+    assert "dirty" not in payload["planner_commit"]
+    assert payload["planner_commit"] in md_text
+    for bit in ("只报数", "report-only", "偏离上游"):
+        assert bit in md_text
+
+    by_key = {(s["scene_kind"], s["arm"]): s for s in payload["summary"]}
+    assert by_key[("m2_forest", "forest_six_07")]["arrived"] == 30
+    assert by_key[("m2_forest", "forest_six_07")]["tree_collisions"] == 0
+    assert by_key[("m2_forest", "forest_six_07")]["inter_drone_collisions"] == 0
+    for scene in ("medium", "sparse"):
+        s = by_key[(scene, "forest_six_07")]
+        assert s["arrived"] == 60
+        assert s["tree_collisions"] == 0
+        assert s["inter_drone_collisions"] == 0
+        assert s["timeouts"] == 0
+        assert s["relative_p95_median_m"] < 5.0
+        assert s["relative_p95_max_m"] < 5.0
+        assert s["official_p95_max_m"] <= 6.0
