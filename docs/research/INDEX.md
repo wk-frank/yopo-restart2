@@ -18,6 +18,8 @@
 | b6-plan-pillar-clearance.md | b6 | 票 B6：规划阶段贴柱余量（柱几何净空过滤，只报数） | report-only、冻结 |
 | b7-clearance-fallback-runs.json | b7 | 柱净空门全拒时退回离柱最远候选（默认关） | report-only |
 | b7-clearance-fallback.md | b7 | 票 B7：柱净空门全拒时退回离柱最远候选（只报数） | report-only、冻结 |
+| b8-fallback-floor-runs.json | b8 | 票 B8：柱净空门全拒退路地板与起步斜坡组合（默认关，只报数） | report-only |
+| b8-fallback-floor.md | b8 | 票 B8：柱净空门全拒退路地板与起步斜坡组合（只报数） | report-only、冻结 |
 | bat1-lockstep-battery-runs.json |  | 票 BAT1：锁步电池 unhealthy（不改 BAT_ 参数，只诊断） | report-only |
 | bat1-lockstep-battery.md |  | 票 BAT1：锁步电池 unhealthy（不改 `BAT_` 参数，只诊断） | report-only |
 | d1-geometric-fallback.md | d1 | 票 D1：提交前的一次性几何回退 | report-only、冻结 |
@@ -123,6 +125,8 @@
 | e-pg3-leader-prefix.md |  | 票 E-PG3：超前机改走短前缀 | report-only、冻结 |
 | e-pg4-prefix-suite-runs.json |  | 票 E-PG4：0.7 s 短前缀在冻结套件上重测，只报数 | report-only、冻结 |
 | e-pg4-prefix-suite.md |  | 票 E-PG4：0.7 s 短前缀在冻结套件上重测（只报数） | report-only、冻结 |
+| e-pg5-forest-six-prefix-runs.json |  | 只报数。report-only。`task.forest_six_prefix` 默认关。没有改磁盘上的 `scenes/*.json`、`core/`、`scenes/suite.txt`、`scripts/regress.sh`、`scripts/premerge.sh`、`README.md`、`docs/tickets.md`，也没有改已冻门。 | report-only、冻结 |
+| e-pg5-forest-six-prefix.md |  | 票 E-PG5：六机林带短前缀按 `_forest_six()` 作用域隔离与相对队形 p95 | report-only、冻结 |
 | e-rerun-det.md |  | 票 E-RERUN：后段研究表的确定性重跑 | report-only、冻结 |
 | e-so3-dynamics-gap-runs.json |  | 只报数。report-only。SO3 两臂是偏离默认动力学（L0 点质量不变）。不改 yopo_l0/ 的默认动力学，不改 core/、scenes/、docs/tickets.md、README.md、scripts/premerge.sh、scripts/regress.sh。规划与策略保持场景卡默认：upstream（柱群和穿林由 CrossingFleet 走上游 YOPO），影子盾开。外环 kp/kd/a_max 与 PointMassLag 相同。τ_att、τ_thrust 和倾角是票面给定的假设，不是本仓库的 SITL 辨识。未冻结，不进 scenes/suite.txt，不设 gates，不改已冻门。 | report-only、冻结 |
 | e-so3-dynamics-gap.md |  | 票 E-SO3：L0 SO3 四旋翼滞后 vs 点质量，只报数 | report-only、冻结 |
@@ -137,6 +141,7 @@
 | m5-a1-closeout-audit.md | m5 | M5-A1：口径 A 第一期收口前置核验 | report-only |
 | p1-inference-speed.md | p1 | P1：YOPO 单次推理耗时 | 冻结 |
 | p1b-sensor-speed.md | p1b | P1b：深度相机求交加速（默认关） | report-only、冻结 |
+| ros2-rflysim-humble.md |  | 票 S-RFLYSIM：RflySim-20.04（Ubuntu 22.04 Humble）ROS 2 锁步桥接、status 动态仓库与 L1 边界核查 | report-only |
 | s4-sitl-bridge.md | s4 | 票 S4：YOPO L0 与 PX4 SITL 的 ENU/NED 闭环桥 | report-only |
 | s4b-sitl-live.md | s4b | 票 S4b：YOPO L0 规划桥接进 PX4 / Gazebo 容器 | report-only |
 | s4c-sitl-yopo-image.md | s4c | 票 S4c：SITL 容器内 YOPO L0 运行时分层镜像 | report-only |
@@ -147,6 +152,7 @@
 | s6-sitl-upstream-m0.md | s6 | 票 S6：upstream + 影子盾接到单机 PX4 SITL，与 M0 g2-pillar 对照（只报数） | report-only |
 | s7-sitl-crossing-switch-runs.json | s7 | 票 S7：三机交叉与变阵 SITL 对照（M3 L1 抽检，只报数） | report-only |
 | s7-sitl-crossing-switch.md | s7 | 票 S7：三机交叉与变阵 SITL 对照（M3 L1 抽检，只报数） | report-only、冻结 |
+| s8-forest-and-m4-sitl.md | s8 | 票 S8：三机林带多圆柱世界与六机 M4 锁步 PX4 SITL 抽检（report-only，判据未冻结） | report-only、冻结 |
 | sh1-shadow-env-evidence-runs.json |  | 票 SH1：影子盾环境证据接入与拒绝率归因（只报数） | report-only、冻结 |
 | sh1-shadow-env-evidence.md |  | 票 SH1：影子盾环境证据接入与拒绝率归因（只报数） | report-only、冻结 |
 | sh2-sitl-shadow-evidence-runs.json |  | 票 SH2：影子盾 ENV 证据接 SITL 与拒绝码归因。只报数。打开即偏离上游。 票 SH2b：种子 3、4 的 4 趟已用隔离网络重跑结果替换；原趟因默认网桥串话作废。 | report-only |

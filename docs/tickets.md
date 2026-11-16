@@ -74,6 +74,11 @@ frank 拍板卡片未回；父代理代定（仅 L0，L1 不动）：
 | C3 | scripts/pr_summary.py 从 regress 输出生成 PR 说明 | 无 | done（#68，合入 `42936cf8b66f`） |
 | C5 | premerge 已验树缓存（record-verified-tree.sh） | 无 | done（#72，合入 `59bae63b6160`） |
 | V1 | E-B4 修复前后回放动图脚本，只报数 | E-B4 | done（#70，合入 `468c869f355c`） |
+| S-RFLYSIM | Ubuntu 22.04 Humble ROS 2 锁步桥接与 status 动态远端解析 | 10, C2 | done（合入 `6ce80332a666`，见 [ros2-rflysim-humble.md](research/ros2-rflysim-humble.md)） |
+| B8 | 柱净空门全拒退路地板与起步斜坡组合，默认关，只报数 | B7 | done（合入 `2e2b67041685`，见 [b8-fallback-floor.md](research/b8-fallback-floor.md)） |
+| E-PG5 | 六机林带短前缀按 `_forest_six()` 作用域隔离与相对队形 p95，默认关，只报数 | 13e | done（合入 `afe44dd642b8`，见 [e-pg5-forest-six-prefix.md](research/e-pg5-forest-six-prefix.md)） |
+| S8 | 三机林带多圆柱世界与六机 M4 锁步 PX4 SITL 抽检，report-only | S2 | done（合入 `41a5894f0825`，见 [s8-forest-and-m4-sitl.md](research/s8-forest-and-m4-sitl.md)） |
+| CLOSEOUT | 收口刷新 M0–M4 结果总表、交付视频索引、已知限制与研究目录索引 | S-RFLYSIM, B8, E-PG5, S8 | done（本票） |
 
 12：交付包收口。12a README 一键命令（#33，`78f63bcdb9bc`）；12b 结果总表（#36，`252bae86781e`）；12c 视频索引（#35，`cf9c0b0b9832`）；12d 已知限制（#34，`7a545ac3a645`）；12e 上游策略 vs 影子盾（#37，`0bb043cae739`）；12f 本票：README 顶部增加交付包入口，并核验所有表格带层级和 commit。干净检出复现由 12a 的 `tests/test_demo.py` 覆盖。
 
