@@ -31,9 +31,9 @@ while [[ $# -gt 0 ]]; do
     --positioning) POSITIONING="${2:-}"; shift 2 ;;
     --positioning=*) POSITIONING="${1#*=}"; shift ;;
     -h|--help)
-      echo "用法：$0 [--bg|--status] [--n 1|2|3] [--positioning default|rtk] [--down]"
+      echo "用法：$0 [--bg|--status] [--n 1|2|3|6] [--positioning default|rtk] [--down]"
       exit 0 ;;
-    *) echo "用法：$0 [--bg|--status] [--n 1|2|3] [--positioning default|rtk] [--down]" >&2; exit 2 ;;
+    *) echo "用法：$0 [--bg|--status] [--n 1|2|3|6] [--positioning default|rtk] [--down]" >&2; exit 2 ;;
   esac
 done
 if [[ "$POSITIONING" != "default" && "$POSITIONING" != "rtk" ]]; then
@@ -86,6 +86,7 @@ start_stack() {
   printf '%s\n' "$run" > "$(stack_file "$n")"
   local shm=1g
   [[ "$n" -gt 1 ]] && shm=2g
+  [[ "$n" -ge 6 ]] && shm=4g
   "${DOCKER[@]}" run -d --name "$name" \
     -e ROS_DOMAIN_ID=0 -e YOPO_SITL_N="$n" -e YOPO_SITL_MISSION=0 \
     -e YOPO_POSITIONING="$pos" \

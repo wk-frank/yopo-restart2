@@ -32,7 +32,8 @@ from pathlib import Path
 # 与 yopo_swarm_core.px4.XRCE_DEFAULT_PORT 保持一致；布局路径不导入 px4（它依赖 numpy）。
 XRCE_PORT = 8888
 DDS_DOMAIN_ID = 0
-MAX_N = 3
+ALLOWED_N = (1, 2, 3, 6)
+MAX_N = 6
 GCS_PORT_BASE = 18570  # px4-rc.mavlink：udp_gcs_port_local = 18570 + px4_instance
 SPAWN_SPACING_M = 3.0
 TAKEOFF_ALT_M = 1.5
@@ -63,8 +64,8 @@ class VehicleSpec:
 def fleet_specs(n: int) -> list[VehicleSpec]:
     if isinstance(n, bool) or not isinstance(n, int):
         raise ValueError(f"n 必须是整数，收到 {n!r}")
-    if n < 1 or n > MAX_N:
-        raise ValueError(f"n 只能是 1..{MAX_N}，收到 {n}")
+    if n not in ALLOWED_N:
+        raise ValueError(f"n 只能是 1、2、3 或 6，收到 {n}")
     if n == 1:
         # S1 单机：instance 0、无 namespace、MAV_SYS_ID 1、Gazebo 模型 x500_0。不改生成点。
         return [VehicleSpec(1, 0, 1, "", "x500_0", GCS_PORT_BASE, "", (0.0, 0.0), False)]
@@ -784,7 +785,7 @@ def run_ros(n: int, out_path: str, wall_timeout: float, world: str, preflight_ti
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="三机 PX4 SITL 布局 / 协同任务（report-only）")
+    ap = argparse.ArgumentParser(description="多机 PX4 SITL 布局 / 协同任务（report-only）")
     sub = ap.add_subparsers(dest="cmd")
     lay = sub.add_parser("layout", help="打印机群布局，不起飞")
     lay.add_argument("--n", type=int, required=True)

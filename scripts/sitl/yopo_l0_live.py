@@ -30,6 +30,7 @@ from yopo_l0.sitl_bridge import (
     normalize_positioning,
     outcome_exit_code,
     resolve_live_policy,
+    build_scene_world_sdf,
     vehicle_topics,
 )
 from yopo_l0.sitl_lockstep import (
@@ -256,6 +257,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("YOPO_B2_FIX", ""),
         help="修复候选，逗号分隔 key=value；目前 lead=<秒>：设定点提前取（偏离上游）。缺省空 = 全关",
     )
+    # 票 S8：场景多圆柱/林带世界 SDF 注入标记（默认关，也可经 YOPO_SITL_SCENE_WORLD=1 打开）。
+    ap.add_argument(
+        "--scene-world",
+        action="store_true",
+        default=_env_flag("YOPO_SITL_SCENE_WORLD"),
+        help="在 Gazebo 世界中注入场景卡圆柱与矮枝静态几何（默认关）",
+    )
+    ap.add_argument(
+        "--world-summary",
+        default=os.environ.get("YOPO_SITL_WORLD_SUMMARY", "/out/world_sdf.json"),
+        help="容器启动时 world_sdf.py 写出的摘要路径",
+    )
     return ap.parse_args(argv)
 
 
@@ -309,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         plan = live_topic_plan(card, positioning=positioning, seed=args.seed, policy=policy)
         plan["lockstep"] = lockstep_plan(card, args)
+        plan["scene_world"] = scene_world_plan(card, args)
         if args.shadow_env_evidence or args.fleet_shadow:
             # 缺省 dry-run 仍是 policy==upstream 才 shadow=True。打开本票开关才改这份计划。
             plan["shadow"] = True
@@ -350,6 +364,22 @@ def lockstep_plan(card, args) -> dict:
         "agent_delay_s": float(args.agent_delay_s),
         "px4_parameters_written": [],
     }
+
+
+def scene_world_plan(card, args) -> dict:
+    """dry-run 与结果记录里的场景几何世界摘要。默认关时只写 enabled=false。"""
+    if not getattr(args, "scene_world", False):
+        return {"enabled": False}
+    summary_path = Path(getattr(args, "world_summary", "") or "")
+    if summary_path.is_file():
+        try:
+            loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict) and loaded.get("scene") == card.name:
+                return loaded
+        except (OSError, ValueError):
+            pass
+    _sdf_xml, summary = build_scene_world_sdf(card, world_name=str(args.world))
+    return summary
 
 
 class _LockstepAbort(Exception):
@@ -437,7 +467,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
     max_s = float(args.max_s) if args.max_s is not None else float(task.get("duration_s", 45.0))
     # 编队飞行大约 20 s。45 s 的缺省 PLAN 超时留给上游。编队放宽到 60 s，仍不含起飞。
     # 票 S7：crossing / switch 也走协议 fleet，同样放宽到 60 s。upstream 仍是 45 s。
-    plan_timeout_s = 60.0 if policy in FLEET_POLICIES else 45.0
+    plan_timeout_s = max(60.0, max_s - 20.0) if policy in FLEET_POLICIES else 45.0
     session = make_live_session(
         card,
         seed=args.seed,
@@ -716,9 +746,10 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
             if failure:
                 break
             # 这一拍里 PX4 已经发过里程计；等它经 uXRCE 到达本进程再算下一拍（墙钟上限 50 ms）。
+            odom_wait_limit_s = 0.10 if len(slots) >= 6 else 0.05
             w_odom = time.monotonic()
             while any(slots[ns]["odom_n"] <= before[ns] for ns in slots):
-                if time.monotonic() - w_odom > 0.05:
+                if time.monotonic() - w_odom > odom_wait_limit_s:
                     odom_wait_timeouts += 1
                     break
                 time.sleep(0.0005)
@@ -814,6 +845,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         payload["deviation"] = "偏离上游：仿真钟锁步"
     else:
         payload["lockstep"] = {"enabled": False}
+    payload["scene_world"] = scene_world_plan(card, args)
     _write(args.out, payload)
     return outcome_exit_code(payload)
 

@@ -1,0 +1,126 @@
+{
+  "name": "crossing-forest-sitl80",
+  "note": "票 S8：与 scenes/crossing-forest.json 只差 name、task.duration_s（50 → 80，含起飞和降落）和本句 note。几何、槽位、criteria 不变。只给 PX4 SITL 锁步抽检用，不进 scenes/suite.txt。",
+  "forest": {
+    "density": "medium",
+    "seed": 7
+  },
+  "ground_z": 0.0,
+  "drones": [
+    {
+      "id": "uav0",
+      "slot_body": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_enu": [
+        0.0,
+        0.0,
+        1.5
+      ]
+    },
+    {
+      "id": "uav1",
+      "slot_body": [
+        0.0,
+        8.0,
+        0.0
+      ],
+      "start_enu": [
+        0.0,
+        8.0,
+        1.5
+      ]
+    },
+    {
+      "id": "uav2",
+      "slot_body": [
+        0.0,
+        -8.0,
+        0.0
+      ],
+      "start_enu": [
+        0.0,
+        -8.0,
+        1.5
+      ]
+    }
+  ],
+  "task": {
+    "type": "crossing",
+    "duration_s": 80.0,
+    "window_len_s": 0.25,
+    "commit_horizon_s": 1.0,
+    "lookahead_s": 2.0,
+    "min_ahead_m": 5.0,
+    "lateral_gain": 0.25,
+    "arrive_radius_m": 1.5,
+    "t_go_s": 0.0,
+    "progress_gate": true,
+    "progress_percentile": 0,
+    "virtual_center": {
+      "origin_enu": [
+        0.0,
+        0.0,
+        1.5
+      ],
+      "length_m": 42.0,
+      "speed_mps": 3.5
+    }
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.4,
+    "goal_speed_mps": 0.2,
+    "goal_hold_s": 1.0,
+    "frozen": true,
+    "gate_densities": [
+      "medium"
+    ],
+    "gates": {
+      "arrival_rate": 1.0,
+      "collisions": 0,
+      "formation_error_p95_m": 6.0,
+      "min_inter_drone_distance_m": 2.0
+    }
+  },
+  "camera": {
+    "width": 160,
+    "height": 96,
+    "hfov_deg": 90.0,
+    "vfov_deg": 60.0,
+    "min_range_m": 0.2,
+    "max_range_m": 20.0,
+    "noise_std_m": 0.02,
+    "mount_xyz_body": [
+      0.13,
+      0.0,
+      0.02
+    ]
+  },
+  "dynamics": {
+    "model": "point_mass_lag",
+    "tau_s": 0.1,
+    "kp": 4.0,
+    "kd": 3.0,
+    "a_max": 6.0
+  },
+  "rates_hz": {
+    "physics": 100,
+    "camera": 30,
+    "planner": 10
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ]
+}

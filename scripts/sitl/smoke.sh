@@ -2,8 +2,8 @@
 # 票 S1：headless 单机 PX4 SITL 冒烟（report-only，不进 scenes/suite.txt）。
 # 票 S2：--n 3 让三架各自起飞到 1.5 m 悬停点再降落，按机记录估计/真值误差。
 # 票 S3：--mission hover|goto|swap。默认 hover，因此 --n 1 仍是 S1、--n 3 仍是 S2 悬停。
-#   scripts/sitl/smoke.sh [--positioning default|rtk] [--n 1|2|3] [--mission hover|goto|swap]
-#   scripts/sitl/smoke.sh [--positioning default|rtk] [--n 1|2|3] [--mission hover|goto|swap] --bg
+#   scripts/sitl/smoke.sh [--positioning default|rtk] [--n 1|2|3|6] [--mission hover|goto|swap]
+#   scripts/sitl/smoke.sh [--positioning default|rtk] [--n 1|2|3|6] [--mission hover|goto|swap] --bg
 # --n 默认 1，走 S1：起飞到 2.5 m → 悬停 10 s → 飞到悬停点 +(5, 3, 0) m → NAV_LAND。
 # --n 2|3 且 --mission hover：若 up.sh --n 已经拉起同一趟仿真，就在那个容器里补跑任务；否则一次性起仿真并飞完。
 # --mission goto：每机在 1.5 m 上飞向悬停点 +(6, 0, 0)。--mission swap：三机错高 1.5/2.2/2.9 m 对飞换位。
@@ -26,8 +26,8 @@ while [[ $# -gt 0 ]]; do
     --positioning=*) POSITIONING="${1#*=}"; shift ;;
     --mission) MISSION_MODE="${2:-}"; shift 2 ;;
     --mission=*) MISSION_MODE="${1#*=}"; shift ;;
-    -h|--help) echo "用法：$0 [--positioning default|rtk] [--n 1|2|3] [--mission hover|goto|swap] [--bg]"; exit 0 ;;
-    *) echo "用法：$0 [--positioning default|rtk] [--n 1|2|3] [--mission hover|goto|swap] [--bg]" >&2; exit 2 ;;
+    -h|--help) echo "用法：$0 [--positioning default|rtk] [--n 1|2|3|6] [--mission hover|goto|swap] [--bg]"; exit 0 ;;
+    *) echo "用法：$0 [--positioning default|rtk] [--n 1|2|3|6] [--mission hover|goto|swap] [--bg]" >&2; exit 2 ;;
   esac
 done
 if [[ "$POSITIONING" != "default" && "$POSITIONING" != "rtk" ]]; then
@@ -156,7 +156,7 @@ set +e
   -e YOPO_SITL_MISSION_MODE="$MISSION_MODE" \
   -e YOPO_SITL_WALL_TIMEOUT="${YOPO_SITL_WALL_TIMEOUT:-900}" \
   -e YOPO_POSITIONING="${YOPO_POSITIONING:-default}" \
-  -v "$REPO_ROOT:/repo:ro" -v "$RUN:/out" --shm-size 2g \
+  -v "$REPO_ROOT:/repo:ro" -v "$RUN:/out" --shm-size "$([[ "$N" -ge 6 ]] && echo 4g || echo 2g)" \
   "$SITL_IMAGE" nice -n "$SITL_NICE" bash /repo/scripts/sitl/in_container.sh 2>&1 | tee "$RUN/console.log"
 rc=${PIPESTATUS[0]}
 set -e

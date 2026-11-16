@@ -75,6 +75,15 @@ def motor_topic(instance: int) -> str:
     return f"/{model_name(instance)}/command/motor_speed"
 
 
+def fleet_handshake_topics(n_drones: int) -> list[str]:
+    """按本仓库实例编号返回 ``n_drones`` 架飞机的锁步电机握手话题（1 机是 x500_0，多机是 x500_1..x500_n）。"""
+    if isinstance(n_drones, bool) or not isinstance(n_drones, int) or n_drones < 1:
+        raise ValueError(f"n_drones 必须是正整数，收到 {n_drones!r}")
+    if n_drones == 1:
+        return [motor_topic(0)]
+    return [motor_topic(i) for i in range(1, n_drones + 1)]
+
+
 def quantize(t_sim: float, step_s: float) -> float:
     """对齐到物理步网格，避免浮点累积让目标落在两步之间。"""
     k = round(float(t_sim) / float(step_s))

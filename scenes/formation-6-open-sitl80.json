@@ -1,0 +1,154 @@
+{
+  "name": "formation-6-open-sitl80",
+  "note": "票 S8：与 scenes/formation-6-open.json 只差 name、task.duration_s（40 → 80，含起飞和降落）和本句 note。几何、槽位、criteria 不变。只给 PX4 SITL 锁步抽检用，不进 scenes/suite.txt。",
+  "geometry": "open-area.json",
+  "ground_z": 0.0,
+  "drones": [
+    {
+      "id": "uav0",
+      "slot_body": [
+        0.0,
+        1.5,
+        0.0
+      ],
+      "start_enu": [
+        0.0,
+        1.5,
+        1.5
+      ]
+    },
+    {
+      "id": "uav1",
+      "slot_body": [
+        0.0,
+        -1.5,
+        0.0
+      ],
+      "start_enu": [
+        0.0,
+        -1.5,
+        1.5
+      ]
+    },
+    {
+      "id": "uav2",
+      "slot_body": [
+        -3.0,
+        3.5,
+        0.0
+      ],
+      "start_enu": [
+        -3.0,
+        3.5,
+        1.5
+      ]
+    },
+    {
+      "id": "uav3",
+      "slot_body": [
+        -3.0,
+        -3.5,
+        0.0
+      ],
+      "start_enu": [
+        -3.0,
+        -3.5,
+        1.5
+      ]
+    },
+    {
+      "id": "uav4",
+      "slot_body": [
+        -6.0,
+        5.5,
+        0.0
+      ],
+      "start_enu": [
+        -6.0,
+        5.5,
+        1.5
+      ]
+    },
+    {
+      "id": "uav5",
+      "slot_body": [
+        -6.0,
+        -5.5,
+        0.0
+      ],
+      "start_enu": [
+        -6.0,
+        -5.5,
+        1.5
+      ]
+    }
+  ],
+  "task": {
+    "type": "formation",
+    "duration_s": 80.0,
+    "window_len_s": 0.5,
+    "progress_gate": false,
+    "virtual_center": {
+      "origin_enu": [
+        0.0,
+        0.0,
+        1.5
+      ],
+      "straight_m": 5.0,
+      "turn_m": 10.0,
+      "final_straight_m": 5.0,
+      "turn": "left",
+      "turn_deg": 90.0,
+      "speed_mps": 2.0
+    }
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.4,
+    "goal_speed_mps": 0.2,
+    "goal_hold_s": 1.0,
+    "frozen": true,
+    "gate_forms": [
+      "inprocess"
+    ],
+    "gates": {
+      "arrival_rate": 1.0,
+      "collisions": 0,
+      "formation_error_p95_m": 0.1,
+      "min_inter_drone_distance_m": 2.5
+    }
+  },
+  "camera": {
+    "width": 160,
+    "height": 96,
+    "hfov_deg": 90.0,
+    "vfov_deg": 60.0,
+    "min_range_m": 0.2,
+    "max_range_m": 20.0,
+    "noise_std_m": 0.02,
+    "mount_xyz_body": [
+      0.13,
+      0.0,
+      0.02
+    ]
+  },
+  "dynamics": {
+    "model": "point_mass_lag",
+    "tau_s": 0.1,
+    "kp": 4.0,
+    "kd": 3.0,
+    "a_max": 6.0
+  },
+  "rates_hz": {
+    "physics": 100,
+    "camera": 30,
+    "planner": 10
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

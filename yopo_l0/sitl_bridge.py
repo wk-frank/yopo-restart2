@@ -41,7 +41,7 @@ from .dynamics import State
 from .formation import FormationFleet
 from .inter_drone import samples_from_pva
 from .policy import Observation, PolicyContext, UpstreamPolicy
-from .scene import SceneCard
+from .scene import Box, Cylinder, SceneCard
 from .sensor import R_BODY_CAM, CameraConfig, DepthCamera, DepthFrame
 from .shadow import DroneShadow, aggregate, aggregate_drones, approved_pva, gate_status
 from . import shadow_sitl
@@ -63,7 +63,7 @@ GCS_PORT_BASE = 18570
 # 与 yopo_l0.runner 的总线盐相同。零故障时这条随机流不被消耗。
 _BUS_SEED_SALT = 0xB05
 # 仿真钟一次跳很远时，按 physics_dt 补协议拍，避免整窗提案被跳过。80 s / 0.02 s。
-_FORMATION_SUBSTEPS = 4000
+_FORMATION_SUBSTEPS = 6000
 _REPO = Path(__file__).resolve().parents[1]
 
 
@@ -2303,3 +2303,237 @@ def run_mock_ros_closed_loop(
         criteria_frozen=False,
     )
     return result
+
+
+# 票 S8：把场景卡里的多圆柱（含倾斜树干）和矮枝静态几何转成 Gazebo Harmonic SDF 模型。
+CORRIDOR_SHELL_NAMES = frozenset({"ceiling", "left_wall", "right_wall", "end_wall", "back_wall"})
+
+DEFAULT_MINIMAL_WORLD_SDF = """<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.9">
+  <world name="default">
+    <physics type="ode">
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>250</real_time_update_rate>
+    </physics>
+    <gravity>0 0 -9.8</gravity>
+  </world>
+</sdf>
+"""
+
+
+def _xml_attr(value: str) -> str:
+    return (
+        str(value)
+        .replace("&", "&amp;")
+        .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _fmt_sdf_num(value: float) -> str:
+    val = 0.0 if abs(float(value)) < 1e-12 else float(value)
+    text = f"{val:.9f}".rstrip("0").rstrip(".")
+    return "0" if text in ("", "-0") else text
+
+
+def cylinder_sdf_geometry(cyl: Cylinder) -> dict:
+    """``Cylinder`` → Gazebo SDF 圆柱的中心位姿 ``(x, y, z, roll, pitch, yaw)``、半径与轴长。
+
+    SDF 圆柱局部对称轴为 ``+z``，中心在局部原点；外旋 XYZ（即 ``R_z(yaw) R_y(pitch) R_x(roll)``）
+    在 ``roll=0`` 时将 ``(0, 0, 1)`` 映到 ``(cos(yaw)*sin(pitch), sin(yaw)*sin(pitch), cos(pitch))``，
+    因此上下端面中心与 ``cyl.axis_ends()`` 精确重合。
+    """
+    if not float(cyl.radius) > 0.0:
+        raise ValueError(f"圆柱 {cyl.name!r} 半径必须为正，收到 {cyl.radius}")
+    base, top = cyl.axis_ends()
+    delta = top - base
+    length = float(np.linalg.norm(delta))
+    if not length > 0.0 or not float(cyl.z_hi) > float(cyl.z_lo):
+        raise ValueError(f"圆柱 {cyl.name!r} 高度必须为正，收到 z_lo={cyl.z_lo}, z_hi={cyl.z_hi}")
+    mid = 0.5 * (base + top)
+    roll = 0.0
+    if cyl.upright():
+        pitch = 0.0
+        yaw = 0.0
+    else:
+        horiz = math.hypot(float(delta[0]), float(delta[1]))
+        pitch = math.atan2(horiz, float(delta[2]))
+        yaw = math.atan2(float(delta[1]), float(delta[0]))
+    return {
+        "name": str(cyl.name),
+        "pose": (float(mid[0]), float(mid[1]), float(mid[2]), roll, pitch, yaw),
+        "radius": float(cyl.radius),
+        "length": length,
+        "upright": bool(cyl.upright()),
+    }
+
+
+def box_sdf_geometry(box: Box) -> dict:
+    """``Box`` → Gazebo SDF 盒子的中心位姿与三维边长。"""
+    lo = np.asarray(box.lo, dtype=float).reshape(3)
+    hi = np.asarray(box.hi, dtype=float).reshape(3)
+    size = hi - lo
+    if np.any(size <= 0.0):
+        raise ValueError(f"盒子 {box.name!r} 尺寸必须为正，收到 lo={box.lo}, hi={box.hi}")
+    mid = 0.5 * (lo + hi)
+    return {
+        "name": str(box.name),
+        "pose": (float(mid[0]), float(mid[1]), float(mid[2]), 0.0, 0.0, 0.0),
+        "size": (float(size[0]), float(size[1]), float(size[2])),
+    }
+
+
+def scene_world_obstacles(
+    card: SceneCard,
+    *,
+    include_branches: bool = True,
+    include_corridor_shell: bool = False,
+) -> tuple[list[dict], list[dict]]:
+    """提取场景卡中的静态圆柱与矮枝盒子（默认跳过走廊外框墙与顶棚）。"""
+    cylinders: list[dict] = []
+    boxes: list[dict] = []
+    for obs in card.obstacles:
+        if isinstance(obs, Cylinder):
+            cylinders.append(cylinder_sdf_geometry(obs))
+        elif isinstance(obs, Box):
+            if obs.name in CORRIDOR_SHELL_NAMES and not include_corridor_shell:
+                continue
+            if include_branches:
+                boxes.append(box_sdf_geometry(obs))
+    return cylinders, boxes
+
+
+def render_obstacle_models_sdf(
+    cylinders: list[dict],
+    boxes: list[dict] | None = None,
+    *,
+    model_prefix: str = "yopo_obs_",
+) -> str:
+    """渲染静态障碍 ``<model>`` 片段（只含静态碰撞体与视觉几何）。"""
+    seen: set[str] = set()
+    blocks: list[str] = []
+    for item in cylinders:
+        model_name = f"{model_prefix}{item['name']}"
+        if model_name in seen:
+            raise ValueError(f"重复的 SDF 模型名：{model_name}")
+        seen.add(model_name)
+        pose_str = " ".join(_fmt_sdf_num(v) for v in item["pose"])
+        rad_str = _fmt_sdf_num(item["radius"])
+        len_str = _fmt_sdf_num(item["length"])
+        esc_name = _xml_attr(model_name)
+        geom_xml = f"<cylinder><radius>{rad_str}</radius><length>{len_str}</length></cylinder>"
+        blocks.append(
+            f'    <model name="{esc_name}">\n'
+            f"      <static>true</static>\n"
+            f"      <pose>{pose_str}</pose>\n"
+            f'      <link name="link">\n'
+            f'        <collision name="collision"><geometry>{geom_xml}</geometry></collision>\n'
+            f'        <visual name="visual"><geometry>{geom_xml}</geometry></visual>\n'
+            f"      </link>\n"
+            f"    </model>"
+        )
+    for item in boxes or []:
+        model_name = f"{model_prefix}{item['name']}"
+        if model_name in seen:
+            raise ValueError(f"重复的 SDF 模型名：{model_name}")
+        seen.add(model_name)
+        pose_str = " ".join(_fmt_sdf_num(v) for v in item["pose"])
+        size_str = " ".join(_fmt_sdf_num(v) for v in item["size"])
+        esc_name = _xml_attr(model_name)
+        geom_xml = f"<box><size>{size_str}</size></box>"
+        blocks.append(
+            f'    <model name="{esc_name}">\n'
+            f"      <static>true</static>\n"
+            f"      <pose>{pose_str}</pose>\n"
+            f'      <link name="link">\n'
+            f'        <collision name="collision"><geometry>{geom_xml}</geometry></collision>\n'
+            f'        <visual name="visual"><geometry>{geom_xml}</geometry></visual>\n'
+            f"      </link>\n"
+            f"    </model>"
+        )
+    return "\n".join(blocks)
+
+
+def build_scene_world_sdf(
+    card: SceneCard,
+    *,
+    base_sdf: str | None = None,
+    world_name: str = "default",
+    include_branches: bool = True,
+    include_corridor_shell: bool = False,
+) -> tuple[str, dict]:
+    """基于基础世界 SDF 注入场景卡圆柱与矮枝，返回 ``(sdf_xml, summary_dict)``。"""
+    import hashlib
+    import xml.etree.ElementTree as ET
+
+    template = DEFAULT_MINIMAL_WORLD_SDF if base_sdf is None else str(base_sdf)
+    root = ET.fromstring(template)
+    world_el = root.find("world")
+    if world_el is None:
+        raise ValueError("基础 SDF 缺少 <world> 节点")
+    actual_world = world_el.attrib.get("name", "")
+    if world_name and actual_world != world_name:
+        raise ValueError(f"基础 SDF world name={actual_world!r} 与期望 {world_name!r} 不一致")
+    cylinders, boxes = scene_world_obstacles(
+        card,
+        include_branches=include_branches,
+        include_corridor_shell=include_corridor_shell,
+    )
+    models_xml = render_obstacle_models_sdf(cylinders, boxes)
+    idx = template.rfind("</world>")
+    if idx < 0:
+        raise ValueError("基础 SDF 缺少闭合 </world>")
+    if models_xml:
+        sdf_text = template[:idx] + models_xml + "\n  " + template[idx:]
+    else:
+        sdf_text = template
+    # 校验拼接后的完整 SDF 仍是合法 XML。
+    ET.fromstring(sdf_text)
+    summary = {
+        "enabled": True,
+        "scene": card.name,
+        "world_name": actual_world or world_name,
+        "n_cylinders": len(cylinders),
+        "n_leaning_cylinders": sum(1 for c in cylinders if not c["upright"]),
+        "n_boxes": len(boxes),
+        "sdf_sha256": hashlib.sha256(sdf_text.encode("utf-8")).hexdigest(),
+        "px4_parameters_written": [],
+    }
+    return sdf_text, summary
+
+
+def write_scene_world_sdf(
+    card: SceneCard,
+    out_dir: str | Path,
+    *,
+    base_sdf_path: str | Path | None = None,
+    world_name: str = "default",
+    include_branches: bool = True,
+) -> dict:
+    """把合成后的 ``<world_name>.sdf`` 写入 ``out_dir``，并链接基础目录里的同级世界文件。"""
+    dest = Path(out_dir)
+    dest.mkdir(parents=True, exist_ok=True)
+    base_text = None
+    if base_sdf_path is not None:
+        src_file = Path(base_sdf_path)
+        if not src_file.is_file():
+            raise ValueError(f"找不到基础世界 SDF：{base_sdf_path}")
+        base_text = src_file.read_text(encoding="utf-8")
+        for sibling in sorted(src_file.parent.iterdir()):
+            if sibling.name == f"{world_name}.sdf":
+                continue
+            target = dest / sibling.name
+            if not target.exists() and not target.is_symlink():
+                target.symlink_to(sibling.resolve())
+    sdf_text, summary = build_scene_world_sdf(
+        card,
+        base_sdf=base_text,
+        world_name=world_name,
+        include_branches=include_branches,
+    )
+    out_sdf = dest / f"{world_name}.sdf"
+    out_sdf.write_text(sdf_text, encoding="utf-8")
+    summary["sdf_path"] = str(out_sdf)
+    return summary

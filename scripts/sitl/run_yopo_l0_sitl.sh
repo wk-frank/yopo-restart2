@@ -27,8 +27,9 @@ SHADOW_ENV_EVIDENCE="${YOPO_SHADOW_ENV_EVIDENCE:-0}"
 FLEET_SHADOW="${YOPO_FLEET_SHADOW:-0}"
 SHADOW_CONTRACT_ALIGN="${YOPO_SHADOW_CONTRACT_ALIGN:-0}"
 SHADOW_TRACKING_ALIGN="${YOPO_SHADOW_TRACKING_ALIGN:-0}"
+SCENE_WORLD="${YOPO_SITL_SCENE_WORLD:-0}"
 usage() {
-  echo "用法：$0 [--scene 场景卡] [--n 1|2|3] [--policy upstream|formation|crossing|switch] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--dry-run]"
+  echo "用法：$0 [--scene 场景卡] [--n 1|2|3|6] [--policy upstream|formation|crossing|switch] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--scene-world] [--dry-run]"
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -65,6 +66,7 @@ while [[ $# -gt 0 ]]; do
     --fleet-shadow) FLEET_SHADOW=1; shift ;;
     --shadow-contract-align) SHADOW_CONTRACT_ALIGN=1; shift ;;
     --shadow-tracking-align) SHADOW_TRACKING_ALIGN=1; shift ;;
+    --scene-world) SCENE_WORLD=1; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
@@ -101,16 +103,22 @@ case "$SHADOW_TRACKING_ALIGN" in
   0|1) ;;
   *) echo "未知 YOPO_SHADOW_TRACKING_ALIGN=$SHADOW_TRACKING_ALIGN（只要 0 或 1）" >&2; exit 2 ;;
 esac
+case "$SCENE_WORLD" in
+  0|1) ;;
+  *) echo "未知 YOPO_SITL_SCENE_WORLD=$SCENE_WORLD（只要 0 或 1）" >&2; exit 2 ;;
+esac
 if ! [[ "$AGENT_DELAY_S" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "--agent-delay-s 要非负数，收到 $AGENT_DELAY_S" >&2
   exit 2
 fi
 case "$N" in
-  1|2|3) ;;
-  *) echo "未知 --n=$N（只要 1、2 或 3）" >&2; exit 2 ;;
+  1|2|3|6) ;;
+  *) echo "未知 --n=$N（只要 1、2、3 或 6）" >&2; exit 2 ;;
 esac
 if [[ -z "$SCENE" ]]; then
-  if [[ "$N" == "3" ]]; then
+  if [[ "$N" == "6" ]]; then
+    SCENE="scenes/formation-6-open-sitl80.json"
+  elif [[ "$N" == "3" ]]; then
     SCENE="scenes/swap-3-open.json"
   elif [[ "$N" == "1" ]]; then
     SCENE="scenes/g2-pillar.json"
@@ -143,8 +151,8 @@ choose_runtime_image() {
 }
 RUNTIME_IMAGE="$(choose_runtime_image)"
 if [[ "$DRY" == "1" ]]; then
-  printf 'planner=yopo-l0\nscene=%s\nn=%s\npolicy=%s\npositioning=%s\nseed=%s\nimage=%s\nlockstep=%s\nagent_delay_s=%s\nshadow_env_evidence=%s\nfleet_shadow=%s\nshadow_contract_align=%s\nshadow_tracking_align=%s\n' \
-    "$SCENE" "$N" "$POLICY" "$POSITIONING" "$SEED" "$RUNTIME_IMAGE" "$LOCKSTEP" "$AGENT_DELAY_S" "$SHADOW_ENV_EVIDENCE" "$FLEET_SHADOW" "$SHADOW_CONTRACT_ALIGN" "$SHADOW_TRACKING_ALIGN"
+  printf 'planner=yopo-l0\nscene=%s\nn=%s\npolicy=%s\npositioning=%s\nseed=%s\nimage=%s\nlockstep=%s\nagent_delay_s=%s\nshadow_env_evidence=%s\nfleet_shadow=%s\nshadow_contract_align=%s\nshadow_tracking_align=%s\nscene_world=%s\n' \
+    "$SCENE" "$N" "$POLICY" "$POSITIONING" "$SEED" "$RUNTIME_IMAGE" "$LOCKSTEP" "$AGENT_DELAY_S" "$SHADOW_ENV_EVIDENCE" "$FLEET_SHADOW" "$SHADOW_CONTRACT_ALIGN" "$SHADOW_TRACKING_ALIGN" "$SCENE_WORLD"
   exit 0
 fi
 python3 "$SITL_DIR/fleet.py" layout --n "$N" --format json >/dev/null
@@ -210,6 +218,7 @@ if "${DOCKER[@]}" ps -q -f "name=^${NAME}$" | grep -q .; then
     -e YOPO_SITL_LOCKSTEP="$LOCKSTEP" -e YOPO_AGENT_DELAY_S="$AGENT_DELAY_S" \
     -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \
     -e YOPO_SHADOW_CONTRACT_ALIGN="$SHADOW_CONTRACT_ALIGN" -e YOPO_SHADOW_TRACKING_ALIGN="$SHADOW_TRACKING_ALIGN" \
+    -e YOPO_SITL_SCENE_WORLD="$SCENE_WORLD" \
     -e YOPO_B2_PLAN_DIAG="${YOPO_B2_PLAN_DIAG:-}" -e YOPO_B2_SAFE_RADIUS="${YOPO_B2_SAFE_RADIUS:-}" -e YOPO_B2_FIX="${YOPO_B2_FIX:-}" \
     -e YOPO_SITL_WALL_TIMEOUT="${YOPO_SITL_WALL_TIMEOUT:-900}" \
     "${cache_env[@]}" \
@@ -226,6 +235,7 @@ mkdir -p "$RUN"
 "${DOCKER[@]}" rm -f "$NAME" >/dev/null 2>&1 || true
 shm=1g
 [[ "$N" != "1" ]] && shm=2g
+[[ "$N" -ge 6 ]] && shm=4g
 # 票 SITL-NET：没给 YOPO_SITL_DOCKER_NETWORK 时为这一趟自建隔离网（yopo-sitl-<id>）。
 # 用户指定的网络只连接、不删除。成功或失败都在 EXIT 时删掉自建网络。
 # 同一网桥上两个容器的 DDS 和 gz-transport 组播会互相发现（话题名、世界名相同），里程计和世界步进会串。
@@ -245,6 +255,7 @@ set +e
   -e YOPO_SITL_LOCKSTEP="$LOCKSTEP" -e YOPO_AGENT_DELAY_S="$AGENT_DELAY_S" \
   -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \
   -e YOPO_SHADOW_CONTRACT_ALIGN="$SHADOW_CONTRACT_ALIGN" -e YOPO_SHADOW_TRACKING_ALIGN="$SHADOW_TRACKING_ALIGN" \
+  -e YOPO_SITL_SCENE_WORLD="$SCENE_WORLD" \
   -e YOPO_B2_PLAN_DIAG="${YOPO_B2_PLAN_DIAG:-}" -e YOPO_B2_SAFE_RADIUS="${YOPO_B2_SAFE_RADIUS:-}" -e YOPO_B2_FIX="${YOPO_B2_FIX:-}" \
   -e YOPO_SITL_WALL_TIMEOUT="${YOPO_SITL_WALL_TIMEOUT:-900}" \
   -e YOPO_POSITIONING="$POSITIONING" \

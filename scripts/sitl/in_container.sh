@@ -64,6 +64,23 @@ case "$PLANNER" in
   offboard|yopo-l0) ;;
   *) echo "未知 YOPO_SITL_PLANNER=$PLANNER（只要 offboard 或 yopo-l0）" >&2; exit 2 ;;
 esac
+SCENE_WORLD="${YOPO_SITL_SCENE_WORLD:-0}"
+case "$SCENE_WORLD" in
+  0|1) ;;
+  *) echo "未知 YOPO_SITL_SCENE_WORLD=$SCENE_WORLD（只要 0 或 1）" >&2; exit 2 ;;
+esac
+default_yopo_scene() {
+  if [[ "$N" -eq 1 ]]; then
+    printf '%s
+' "scenes/g2-pillar.json"
+  elif [[ "$N" -eq 6 ]]; then
+    printf '%s
+' "scenes/formation-6-open-sitl80.json"
+  else
+    printf '%s
+' "scenes/swap-3-open.json"
+  fi
+}
 if [[ "$PLANNER" == "yopo-l0" ]]; then
   # 只在 YOPO 实飞注入。参数都在 PX4 的 SITL 组，不改 COM_ / NAV_ / BAT_ 安全默认值。
   # shellcheck disable=SC1091
@@ -71,6 +88,16 @@ if [[ "$PLANNER" == "yopo-l0" ]]; then
   # shellcheck disable=SC1091
   . /repo/scripts/sitl/sitl-battery.env
   set +a
+  if [[ "$SCENE_WORLD" == "1" ]]; then
+    scene_for_world="${YOPO_L0_SCENE:-$(default_yopo_scene)}"
+    base_world_args=()
+    if [[ -n "${PX4_GZ_WORLDS:-}" && -f "${PX4_GZ_WORLDS}/default.sdf" ]]; then
+      base_world_args=(--base-sdf "${PX4_GZ_WORLDS}/default.sdf")
+    fi
+    PYTHONPATH="/repo:/repo/core/src${PYTHONPATH:+:$PYTHONPATH}"       python3 /repo/scripts/sitl/world_sdf.py         --scene "$scene_for_world"         "${base_world_args[@]}"         --out-dir "$OUT/worlds"         --summary "$OUT/world_sdf.json" >/dev/null
+    export PX4_GZ_WORLDS="$OUT/worlds"
+    echo "yopo scene world enabled: $OUT/worlds/default.sdf"
+  fi
 fi
 python3 /repo/scripts/sitl/fleet.py layout --n "$N" --mission "$MISSION_MODE" --format json >/dev/null
 
@@ -158,17 +185,20 @@ if [[ "$N" -eq 1 ]]; then
   finish_mission_rc "$rc"
 fi
 
-if [[ "$N" -gt 3 ]]; then
-  echo "YOPO_SITL_N=$N 超出 1..3" >&2
-  exit 2
-fi
+case "$N" in
+  2|3|6) ;;
+  *)
+    echo "YOPO_SITL_N=$N 超出支持范围（1、2、3 或 6）" >&2
+    exit 2
+    ;;
+esac
 
 python3 /repo/scripts/sitl/fleet.py --n "$N" --format shell > "$OUT/layout.txt"
 if [[ "$PLANNER" == "yopo-l0" && "$N" -gt 1 ]]; then
   # S2 沿 y 轴 0/3/6 m 生成。swap-3-open 的起点在半径 8 m 的圆上，两者不是同一套点。
   # 实飞以场景卡为准写 PX4_GZ_MODEL_POSE。桥接用同一水平偏置把本地里程计抬到世界系。
   python3 /repo/scripts/sitl/fleet.py yopo-poses \
-    --scene "${YOPO_L0_SCENE:-scenes/swap-3-open.json}" \
+    --scene "${YOPO_L0_SCENE:-$(default_yopo_scene)}" \
     --n "$N" \
     --layout "$OUT/layout.txt" > "$OUT/layout.yopo.txt"
   mv "$OUT/layout.yopo.txt" "$OUT/layout.txt"
