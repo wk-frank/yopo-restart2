@@ -67,7 +67,12 @@ from .inter_drone import (
     sample_motion,
 )
 from .policy import R_yaw, read_safe_radius, upstream_decoder
-from .progress import read_leader_margin_m, read_leader_prefix, read_progress_settings
+from .progress import (
+    read_forest_six_prefix,
+    read_leader_margin_m,
+    read_leader_prefix,
+    read_progress_settings,
+)
 from .scene import Box, Cylinder, parse_geometry
 
 # 轨迹采样步长。0.02 s 的弦高按动力学 a_max 计大约几毫米，门按采样到的最小距离判。
@@ -498,6 +503,15 @@ class CrossingFleet:
         self.leader_prefix_enabled, self.leader_prefix_s = read_leader_prefix(
             task, default_s=_LEADER_PREFIX_S
         )
+        # E-PG5：默认关。仅对带森林的六机（_forest_six()）同时开启门控与短前缀；
+        # 三机穿林和柱林不触发，保持原有门控与 task_hash。
+        six_prefix_req, six_prefix_s = read_forest_six_prefix(task)
+        self.forest_six_prefix_requested = six_prefix_req
+        self.forest_six_prefix_enabled = bool(six_prefix_req and self._forest_six())
+        if self.forest_six_prefix_enabled:
+            self.progress_gate = True
+            self.leader_prefix_enabled = True
+            self.leader_prefix_s = six_prefix_s
         # 超前机悬停/短前缀用场景加速度。13a 之后计划契约已经是同一组限幅。
         self.gentle_limits = plan_limits_for_dynamics(card.get("dynamics"))
         self._progress = {did: 0.0 for did in self.members}
@@ -538,6 +552,8 @@ class CrossingFleet:
         if self.leader_prefix_enabled:
             task_id["leader_prefix"] = True
             task_id["leader_prefix_s"] = self.leader_prefix_s
+        if self.forest_six_prefix_enabled:
+            task_id["forest_six_prefix"] = True
         self.cfg = ProtocolConfig(
             members=self.members,
             window_len=window,
@@ -1488,6 +1504,8 @@ class CrossingFleet:
         if self.leader_prefix_enabled:
             out["leader_prefix"] = True
             out["leader_prefix_s"] = self.leader_prefix_s
+        if self.forest_six_prefix_enabled:
+            out["forest_six_prefix"] = True
         if self.rail.ramp_mps2 is not None:
             out["center_ramp_mps2"] = self.rail.ramp_mps2
             out["center_ramp_s"] = self.rail.t_ramp

@@ -4,6 +4,9 @@
 
 票 E-PG3：task.leader_prefix 默认关。关着时超前机仍先悬停，再退到 0.3 s 短前缀。
 打开后超前机只飞 task.leader_prefix_s 那么长的一段，接不上再等待或续接。打开即偏离上游。
+
+票 E-PG5：task.forest_six_prefix 默认关。打开后仅对带森林的六机（_forest_six()）
+同时开启进度门控与短前缀（缺省 0.7 s），三机穿林与柱林保持原样。打开且生效即偏离上游。
 """
 
 from __future__ import annotations
@@ -13,6 +16,7 @@ import math
 # 短于这一截时 _fit_horizon 直接放弃。长于 2 s 就盖过六机一轮窗口，不再是短前缀。
 LEADER_PREFIX_MIN_S = 0.2
 LEADER_PREFIX_MAX_S = 2.0
+FOREST_SIX_PREFIX_DEFAULT_S = 0.7
 
 
 def read_progress_settings(task: dict, *, default_gate: bool) -> tuple[bool, float]:
@@ -51,9 +55,9 @@ def read_leader_margin_m(task: dict, *, default: float = 1.0) -> float:
     return margin
 
 
-def _parse_leader_prefix_s(raw: object) -> float:
+def _parse_prefix_length_s(raw: object, *, field: str) -> float:
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
-        raise ValueError(f"leader_prefix_s 必须是数字，收到 {raw!r}")
+        raise ValueError(f"{field} 必须是数字，收到 {raw!r}")
     length = float(raw)
     if (
         not math.isfinite(length)
@@ -61,9 +65,13 @@ def _parse_leader_prefix_s(raw: object) -> float:
         or length > LEADER_PREFIX_MAX_S
     ):
         raise ValueError(
-            f"leader_prefix_s 必须在 [{LEADER_PREFIX_MIN_S:g}, {LEADER_PREFIX_MAX_S:g}] 秒，收到 {raw!r}"
+            f"{field} 必须在 [{LEADER_PREFIX_MIN_S:g}, {LEADER_PREFIX_MAX_S:g}] 秒，收到 {raw!r}"
         )
     return length
+
+
+def _parse_leader_prefix_s(raw: object) -> float:
+    return _parse_prefix_length_s(raw, field="leader_prefix_s")
 
 
 def read_leader_prefix(task: dict, *, default_s: float = 0.3) -> tuple[bool, float]:
@@ -81,6 +89,30 @@ def read_leader_prefix(task: dict, *, default_s: float = 0.3) -> tuple[bool, flo
         enabled = False
     if "leader_prefix_s" in task:
         parsed = _parse_leader_prefix_s(task["leader_prefix_s"])
+    else:
+        parsed = None
+    if not enabled:
+        return False, float(default_s)
+    return True, float(default_s if parsed is None else parsed)
+
+
+def read_forest_six_prefix(
+    task: dict, *, default_s: float = FOREST_SIX_PREFIX_DEFAULT_S
+) -> tuple[bool, float]:
+    """读 task.forest_six_prefix / task.forest_six_prefix_s。
+
+    开关缺省 false。关时忽略卡上的长度，返回 default_s。
+    开时长度缺省 default_s（0.7 s），必须落在 [0.2, 2.0]。
+    是否实际生效由 CrossingFleet._forest_six() 决定：三机穿林与柱林不触发。
+    """
+    if "forest_six_prefix" in task:
+        enabled = task["forest_six_prefix"]
+        if enabled is not True and enabled is not False:
+            raise ValueError(f"forest_six_prefix 必须是布尔，收到 {enabled!r}")
+    else:
+        enabled = False
+    if "forest_six_prefix_s" in task:
+        parsed = _parse_prefix_length_s(task["forest_six_prefix_s"], field="forest_six_prefix_s")
     else:
         parsed = None
     if not enabled:
