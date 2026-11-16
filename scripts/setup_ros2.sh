@@ -49,7 +49,9 @@ ldconfig_ros() {
 
 rclpy_imports() {
   [[ -f "/opt/ros/${DISTRO}/setup.bash" ]] || return 1
-  bash -c "set +u; source '/opt/ros/${DISTRO}/setup.bash'; python3 -c 'import rclpy; from rosgraph_msgs.msg import Clock; from std_msgs.msg import String'"
+  local sys_py="/usr/bin/python3"
+  [[ -x "${sys_py}" ]] || sys_py="python3"
+  bash -c "set +u; source '/opt/ros/${DISTRO}/setup.bash'; '${sys_py}' -c 'import rclpy; from rosgraph_msgs.msg import Clock; from std_msgs.msg import String'"
 }
 
 venv_rclpy() {
@@ -105,6 +107,9 @@ PKGS=(
   "ros-${DISTRO}-rosgraph-msgs"
   "python3-yaml"  # rclpy 在系统 site-packages 里找 yaml；.venv 不带它
 )
+if [[ "${DISTRO}" == "humble" ]]; then
+  PKGS+=("ros-humble-rmw-cyclonedds-cpp")
+fi
 if apt-cache show python3-rclpy >/dev/null 2>&1; then
   PKGS+=(python3-rclpy)
 else

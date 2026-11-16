@@ -2,10 +2,54 @@
 # 票 C2：只读状态快照。
 set -u
 
+REPO_EXPLICIT=0
+[[ -v YOPO_REPO_DIR ]] && REPO_EXPLICIT=1
+
 YOPO_OPS_DIR=${YOPO_OPS_DIR:-/workspace/yopo-ops}
 WT_YOPO=${WT_YOPO:-/home/box/opt/worktrunk/bin/wt-yopo-restart}
 YOPO_REPO_DIR=${YOPO_REPO_DIR:-/workspace/yopo-restart}
 GH=${GH:-gh}
+SCRIPT_ROOT=$(cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd)
+
+parse_repo_slug() {
+  local url=${1:-}
+  url=${url%/}
+  url=${url%.git}
+  if [[ "$url" =~ ^(https?|ssh)://([^/@]+@)?[^/:]+(:[0-9]+)?/([^/:]+/[^/]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[4]}"
+    return 0
+  fi
+  if [[ "$url" =~ ^([^/@]+@)?[^/:]+:([^/:]+/[^/]+)$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  return 1
+}
+
+resolve_gh_repo() {
+  if [[ -n "${YOPO_GH_REPO:-}" ]]; then
+    printf '%s\n' "$YOPO_GH_REPO"
+    return 0
+  fi
+  local dirs=("$YOPO_REPO_DIR")
+  if [[ "$REPO_EXPLICIT" -eq 0 ]]; then
+    dirs+=(".")
+    [[ -n "${SCRIPT_ROOT:-}" ]] && dirs+=("$SCRIPT_ROOT")
+  fi
+  local dir url slug
+  for dir in "${dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    if url=$(GIT_OPTIONAL_LOCKS=0 git -C "$dir" remote get-url origin 2>/dev/null); then
+      if slug=$(parse_repo_slug "$url"); then
+        printf '%s\n' "$slug"
+        return 0
+      fi
+    fi
+  done
+  printf '%s\n' 'unununnnn/yopo-restart'
+}
+
+GH_REPO=$(resolve_gh_repo)
 
 printf '生成时间：%s\n' "$(TZ=America/Argentina/San_Juan date '+%F %T UTC-3')"
 
@@ -13,7 +57,7 @@ printf '\n## 开放 PR\n'
 printf '| 号 | 标题 | head sha | CI |\n'
 printf '|---|---|---|---|\n'
 if command -v "$GH" >/dev/null 2>&1; then
-  if pr_json=$("$GH" pr list -R unununnnn/yopo-restart --state open --json number,title,headRefOid 2>/dev/null); then
+  if pr_json=$("$GH" pr list -R "$GH_REPO" --state open --json number,title,headRefOid 2>/dev/null); then
     if pr_lines=$(printf '%s\n' "$pr_json" | PYTHONDONTWRITEBYTECODE=1 python3 -c '
 import json
 import sys

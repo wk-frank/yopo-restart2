@@ -60,6 +60,8 @@ def _import_rclpy():
             raise SystemExit(f"rclpy 不可导入：{exc}。运行 scripts/setup_ros2.sh") from exc
         os.environ["_YOPO_L0_ROS_REEXEC"] = "1"
         os.execv(sys.executable, [sys.executable, *sys.argv])
+    except ImportError as exc:
+        raise SystemExit(f"rclpy 不可导入：{exc}。运行 scripts/setup_ros2.sh") from exc
     return rclpy
 
 

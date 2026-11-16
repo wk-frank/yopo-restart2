@@ -35,6 +35,11 @@ from conftest import ROOT
 OPEN = ROOT / "scenes/open-3drone.json"
 PILLAR = ROOT / "scenes/g2-pillar.json"
 _XDIST_WORKER = os.environ.get("PYTEST_XDIST_WORKER")
+if "ROS_DOMAIN_ID" not in os.environ:
+    if _XDIST_WORKER and _XDIST_WORKER.startswith("gw") and _XDIST_WORKER[2:].isdigit():
+        os.environ["ROS_DOMAIN_ID"] = str(40 + (int(_XDIST_WORKER[2:]) % 50))
+    else:
+        os.environ["ROS_DOMAIN_ID"] = str(40 + (os.getpid() % 50))
 _COMPARE = ROOT / "out" / (
     f"ros2-compare-{_XDIST_WORKER}.md" if _XDIST_WORKER else "ros2-compare.md"
 )
@@ -281,3 +286,9 @@ def test_ros2_matches_inprocess_arrival_and_collision(scene: Path, policy: str, 
     assert _strip(proc.result) == _strip(ros.result)
     assert proc.ticks == ros.ticks
     _record(json.loads(scene.read_text())["name"], policy, 0, proc.result, ros.result, info["nodes"], info["clock_ok"])
+
+
+def test_ros2_not_skipped_when_system_ros2_installed():
+    has_ros = any((Path("/opt/ros") / d / "setup.bash").is_file() for d in ("jazzy", "humble"))
+    if has_ros:
+        assert _ROS_SKIP is None, f"系统已安装 ROS 2 但测试仍会跳过：{_ROS_SKIP}"

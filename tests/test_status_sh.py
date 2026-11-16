@@ -1,4 +1,4 @@
-"""票 C2：状态脚本只读，四段输出互不影响。"""
+"""票 C2：状态脚本只读，四段输出互不影响，并动态解析 origin 仓库 slug。"""
 
 import os
 import re
@@ -19,16 +19,33 @@ def _snapshot(root: Path) -> dict[str, bytes | None]:
     }
 
 
-def _run(tmp_path: Path, ops: Path, gh: Path, wt: Path) -> subprocess.CompletedProcess[str]:
+def _run(
+    tmp_path: Path,
+    ops: Path,
+    gh: Path,
+    wt: Path,
+    *,
+    repo_dir: Path | None = None,
+    set_repo_env: bool = True,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    env.pop("YOPO_GH_REPO", None)
+    env.pop("YOPO_REPO_DIR", None)
     env.update(
         YOPO_OPS_DIR=str(ops),
         GH=str(gh),
         WT_YOPO=str(wt),
-        YOPO_REPO_DIR=str(tmp_path / "repo"),
     )
+    if set_repo_env:
+        env["YOPO_REPO_DIR"] = str(repo_dir if repo_dir is not None else tmp_path / "repo")
     return subprocess.run(
-        [str(STATUS)], cwd=tmp_path, env=env, capture_output=True, text=True, check=False
+        [str(STATUS)],
+        cwd=cwd if cwd is not None else tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
@@ -97,6 +114,69 @@ def test_status_snapshot_is_read_only(tmp_path):
     assert f"{ops / 'no-log.pid'} | PID：{dead_pid} | 死 | 日志：无日志" in pids
     assert "工作树记录" in proc.stdout
     assert "pgrep" not in STATUS.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("remote_url", "expected_slug"),
+    [
+        ("https://github.com/wk-frank/yopo-restart2", "wk-frank/yopo-restart2"),
+        ("https://github.com/wk-frank/yopo-restart2.git", "wk-frank/yopo-restart2"),
+        ("git@github.com:wk-frank/yopo-restart2.git", "wk-frank/yopo-restart2"),
+        ("ssh://git@github.com/wk-frank/yopo-restart2.git", "wk-frank/yopo-restart2"),
+        ("/tmp/local-bare-origin", "unununnnn/yopo-restart"),
+    ],
+)
+def test_status_resolves_repo_slug_from_origin_with_fallback(tmp_path, remote_url, expected_slug):
+    ops = tmp_path / "ops"
+    ops.mkdir()
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", remote_url], check=True)
+
+    gh = tmp_path / "fake-gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        f"[[ \"$*\" == 'pr list -R {expected_slug} --state open --json number,title,headRefOid' ]] || exit 2\n"
+        "printf '%s\\n' '[{\"number\":7,\"title\":\"动态仓库\",\"headRefOid\":\"1234567890abcdef\"}]'\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    wt = tmp_path / "missing-wt"
+
+    before = _snapshot(tmp_path)
+    proc = _run(tmp_path, ops, gh, wt, repo_dir=repo)
+    assert _snapshot(tmp_path) == before
+    assert proc.returncode == 0, proc.stderr
+    prs = _section(proc.stdout, "## 开放 PR", "## 队列与结果")
+    assert "| #7 | 动态仓库 | 1234567 | 无 |" in prs
+
+
+def test_status_resolves_checkout_origin_when_repo_dir_env_unset(tmp_path):
+    ops = tmp_path / "ops"
+    ops.mkdir()
+    checkout = tmp_path / "checkout"
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+    subprocess.run(
+        ["git", "-C", str(checkout), "remote", "add", "origin", "https://github.com/wk-frank/yopo-restart2.git"],
+        check=True,
+    )
+
+    gh = tmp_path / "fake-gh"
+    gh.write_text(
+        "#!/usr/bin/env bash\n"
+        "[[ \"$*\" == 'pr list -R wk-frank/yopo-restart2 --state open --json number,title,headRefOid' ]] || exit 2\n"
+        "printf '%s\\n' '[]'\n",
+        encoding="utf-8",
+    )
+    gh.chmod(0o755)
+    wt = tmp_path / "missing-wt"
+
+    before = _snapshot(tmp_path)
+    proc = _run(tmp_path, ops, gh, wt, set_repo_env=False, cwd=checkout)
+    assert _snapshot(tmp_path) == before
+    assert proc.returncode == 0, proc.stderr
+    prs = _section(proc.stdout, "## 开放 PR", "## 队列与结果")
+    assert "（无）" in prs
 
 
 @pytest.mark.parametrize(
