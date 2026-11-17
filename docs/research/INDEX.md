@@ -57,6 +57,8 @@
 | d8-dagger-variance.md | d8 | 票 D8：DAgger 方差与 g2 退化归因（只报数） | report-only |
 | d9-cap-weight-runs.json | d9 | 票 D9：限速与 g2 加权 5 种子确认（只报数） | report-only |
 | d9-cap-weight.md | d9 | 票 D9：限速与 g2 加权 5 种子确认（只报数） | report-only |
+| depth-only-dense-forest900-runs.json |  | （无说明字段） | 无 |
+| depth-only-dense-forest900.md |  | 无先验地图高密度树林六机900m验收 | 冻结 |
 | e-a1-inter-drone-filter.md | e-a1 | 票 E-A1：机间过滤开关，默认关 | report-only、冻结 |
 | e-a2-inter-soft-yield-runs.json | e-a2 | 只报数。report-only。不改默认 inter_drone_soft_yield false、empty_brake false、track_clearance false。四档都打开 E-A1（阈值 1.0 m、惩罚 0）和 empty_brake；geom 两档再打开 track_clearance mode=geom、margin 0.08 m。全部偏离上游。soft_yield 默认关。hard_min_m 0.75 m 高于 0.70 m 机间碰撞球。这是假设，不是论文复现（障碍半径 0.20 m，边长 20.0 m）。未冻结，不进 scenes/suite.txt，不设 gates。 | report-only |
 | e-a2-inter-soft-yield.md | e-a2 | 票 E-A2：机间过滤防死锁软让行，默认关 | report-only、冻结 |

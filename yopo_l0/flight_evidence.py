@@ -81,7 +81,7 @@ def acceptance(result, card):
         span=0. if first is None or last is None else last-first
         checks['gazebo_rendered_video']=(video.get('source')=='gazebo-native-rgb-camera'
             and video.get('ffmpeg_exit_code')==0 and video.get('errors')==[]
-            and span>=0.90*float(result.get('sim_s',0.))
+            and float(result.get('sim_time_s',0.))>0. and span>=0.90*float(result['sim_time_s'])
             and video.get('frames',0)>=0.90*10.*span and bool(video.get('mp4_sha256')))
     if (card.card.get('task') or {}).get('depth_only',False):
         contract=result.get('perception_contract',{})

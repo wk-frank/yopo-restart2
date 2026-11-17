@@ -40,12 +40,22 @@ def test_native_acceptance_requires_six_consumed_streams_and_real_video():
     result['depth_sources']=['gazebo-native-depth']
     result['native_depth']={'source':'gazebo-native-depth','fallback_used':False,'decode_errors':[],
         'vehicles':{f'px4_{i}':{'unique_consumed':3000,'max_age_s':.08,'finite_pixels':10000} for i in range(1,7)}}
+    result['sim_time_s']=240.
     result['gazebo_video']={'source':'gazebo-native-rgb-camera','frames':2200,
         'first_gazebo_stamp_s':10.,'last_gazebo_stamp_s':230.,'ffmpeg_exit_code':0,'errors':[], 'mp4_sha256':'a'*64}
     assert acceptance(result,card)['passed']
     result['native_depth']['vehicles']['px4_6']['max_age_s']=.3
     assert not acceptance(result,card)['passed']
     result['native_depth']['vehicles']['px4_6']['max_age_s']=.08
+    # A short but otherwise valid recording must fail against the actual runtime field.
+    result['gazebo_video']['last_gazebo_stamp_s']=30.
+    result['gazebo_video']['frames']=200
+    assert not acceptance(result,card)['checks']['gazebo_rendered_video']
+    result['gazebo_video']['last_gazebo_stamp_s']=230.
+    result['gazebo_video']['frames']=2200
+    del result['sim_time_s']
+    assert not acceptance(result,card)['checks']['gazebo_rendered_video']
+    result['sim_time_s']=240.
     result['gazebo_video']['frames']=0
     assert not acceptance(result,card)['passed']
 

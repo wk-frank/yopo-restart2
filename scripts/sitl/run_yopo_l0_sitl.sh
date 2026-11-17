@@ -283,6 +283,7 @@ if ! sitl_prepare_run_network; then
 fi
 printf 'network=%s\nowned=%s\n' "$SITL_RUN_NETWORK" "$SITL_RUN_NETWORK_OWNED" > "$RUN/docker_network.txt"
 net_args=(--network "$SITL_RUN_NETWORK")
+if [[ -n "${YOPO_SITL_MEMORY_LIMIT:-}" ]]; then net_args+=(--memory "$YOPO_SITL_MEMORY_LIMIT" --memory-swap "$YOPO_SITL_MEMORY_LIMIT"); fi
 render_args=()
 case "${YOPO_SITL_GAZEBO_GPU:-software}" in
   software) ;;
