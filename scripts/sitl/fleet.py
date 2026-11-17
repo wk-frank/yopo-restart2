@@ -257,6 +257,64 @@ def pose_xy(x: float, y: float) -> str:
     return f"{one(x)},{one(y)}"
 
 
+def min_spawn_separation_m(starts: list[tuple[float, float]]) -> float | None:
+    """生成点在水平面上的两两最小欧氏距离；少于 2 架时返回 None。"""
+    if len(starts) < 2:
+        return None
+    best = None
+    for i in range(len(starts)):
+        for j in range(i + 1, len(starts)):
+            dist = math.hypot(starts[i][0] - starts[j][0], starts[i][1] - starts[j][1])
+            best = dist if best is None else min(best, dist)
+    return best
+
+
+def horizontal_line_spawns(
+    n: int,
+    *,
+    x_m: float = 0.0,
+    spacing_m: float = SPAWN_SPACING_M,
+    centered: bool = True,
+) -> list[tuple[float, float]]:
+    """统一横线起飞生成点：全部位于 ``x = x_m``，沿 ``y`` 等距排布。"""
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError(f"n 必须是正整数，收到 {n!r}")
+    spacing = float(spacing_m)
+    if not math.isfinite(spacing) or spacing < MIN_GEOMETRIC_SEPARATION_M - 1e-6:
+        raise ValueError(f"spacing_m 至少为 {MIN_GEOMETRIC_SEPARATION_M:.1f} m，收到 {spacing_m!r}")
+    x = float(x_m)
+    if not math.isfinite(x):
+        raise ValueError(f"x_m 必须是有限数，收到 {x_m!r}")
+    if n == 1:
+        return [(x, 0.0)]
+    y0 = -0.5 * (n - 1) * spacing if centered else 0.0
+    return [(x, float(y0 + i * spacing)) for i in range(n)]
+
+
+def inspect_scene_spawns(scene_path: str | Path, *, x_tol_m: float = 1e-6) -> dict:
+    """检查场景卡 ``drones[*].start_enu`` 是否构成统一横线等距起飞排布。"""
+    starts = scene_start_xy(scene_path)
+    xs = [pt[0] for pt in starts]
+    ys_sorted = sorted(pt[1] for pt in starts)
+    x_span = 0.0 if not xs else float(max(xs) - min(xs))
+    gaps = [float(ys_sorted[i + 1] - ys_sorted[i]) for i in range(len(ys_sorted) - 1)]
+    uniform = len(gaps) <= 1 or (max(gaps) - min(gaps) <= 1e-6)
+    min_sep = min_spawn_separation_m(starts)
+    return {
+        "n": len(starts),
+        "starts_xy": [[float(x), float(y)] for x, y in starts],
+        "poses": [pose_xy(x, y) for x, y in starts],
+        "horizontal_line": bool(x_span <= float(x_tol_m)),
+        "x0_m": None if not xs else float(xs[0]),
+        "x_span_m": x_span,
+        "y_sorted_m": ys_sorted,
+        "lateral_gaps_m": gaps,
+        "lateral_spacing_m": gaps[0] if gaps and uniform else None,
+        "uniform_lateral_spacing": bool(uniform),
+        "min_spawn_separation_m": min_sep,
+    }
+
+
 def scene_start_xy(scene_path: str | Path) -> list[tuple[float, float]]:
     """场景卡 ``start_enu`` 的水平坐标。相对路径按仓库根解析。"""
     path = Path(scene_path)
@@ -266,7 +324,7 @@ def scene_start_xy(scene_path: str | Path) -> list[tuple[float, float]]:
             path = alt
         else:
             raise ValueError(f"找不到场景卡：{scene_path}")
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     drones = data.get("drones") or []
     if not drones:
         raise ValueError(f"{path} 没有飞机")
@@ -275,7 +333,10 @@ def scene_start_xy(scene_path: str | Path) -> list[tuple[float, float]]:
         start = drone.get("start_enu")
         if not isinstance(start, (list, tuple)) or len(start) < 2:
             raise ValueError(f"{drone.get('id', '?')} 缺少 start_enu")
-        starts.append((float(start[0]), float(start[1])))
+        x, y = float(start[0]), float(start[1])
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise ValueError(f"{drone.get('id', '?')} 的 start_enu 不是有限数")
+        starts.append((x, y))
     return starts
 
 
@@ -283,11 +344,16 @@ def apply_scene_spawn_poses(layout_text: str, scene_path: str | Path, n: int) ->
     """把 shell 布局里的 ``pose=`` 换成场景卡起点。
 
     S2 默认仍是沿 y 轴 0/3/6 m。三机场景卡（swap-3-open）的起点在半径 8 m 的圆上，
-    和这条直线不是同一套点。YOPO 实飞以场景卡为准生成；不改 ``format_shell`` 的默认输出。
+    explore 场景卡起点在 ``x = 0`` 统一横线上。YOPO 实飞以场景卡为准生成；不改 ``format_shell`` 的默认输出。
     """
     starts = scene_start_xy(scene_path)
     if len(starts) != int(n):
         raise ValueError(f"场景卡有 {len(starts)} 架，--n 是 {n}")
+    min_sep = min_spawn_separation_m(starts)
+    if min_sep is not None and min_sep < MIN_GEOMETRIC_SEPARATION_M - 1e-6:
+        raise ValueError(
+            f"场景卡起点最小水平间隔 {min_sep:.3f} m 小于 {MIN_GEOMETRIC_SEPARATION_M:.1f} m"
+        )
     poses = [pose_xy(x, y) for x, y in starts]
     index = 0
     out = []

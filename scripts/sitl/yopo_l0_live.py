@@ -23,8 +23,10 @@ from yopo_l0.scene import load_card
 from yopo_l0.sitl_bridge import (
     ClockSkewMeter,
     FLEET_POLICIES,
+    LIVE_POLICIES,
     LiveFleetConfig,
     VehicleInbox,
+    apply_explore_velocity_override,
     live_topic_plan,
     make_live_session,
     normalize_positioning,
@@ -188,9 +190,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ap.add_argument("--positioning", choices=("default", "rtk"), default=None)
     ap.add_argument(
         "--policy",
-        choices=("upstream", "formation", "crossing", "switch"),
+        choices=LIVE_POLICIES,
         default="upstream",
-        help="upstream 走 YOPO。formation / crossing / switch 只用于同名 task.type 的卡，机间消息留在进程内总线",
+        help="upstream 走 YOPO。formation / crossing / switch / explore 只用于同名 task.type 的卡，机间消息留在进程内总线",
     )
     ap.add_argument("--world", default="default")
     ap.add_argument("--preflight-timeout", type=float, default=240.0)
@@ -269,6 +271,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=os.environ.get("YOPO_SITL_WORLD_SUMMARY", "/out/world_sdf.json"),
         help="容器启动时 world_sdf.py 写出的摘要路径",
     )
+    ap.add_argument(
+        "--velocity-mps",
+        type=float,
+        default=_env_float("YOPO_EXPLORE_VELOCITY_MPS"),
+        help="在内存里盖过 explore 场景卡 task.velocity_mps（时间相似比 ratio = velocity_mps / 6.0，缺省按场景卡）",
+    )
     return ap.parse_args(argv)
 
 
@@ -306,10 +314,12 @@ def main(argv: list[str] | None = None) -> int:
             b3=b3_from_fix(args.b2_fix_cfg),
         )
         b2_deviations += fix_deviations(args.b2_fix_cfg)
+        card, explore_overrides = apply_explore_velocity_override(card, args.velocity_mps)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
     args.b2_deviations = b2_deviations
+    args.explore_overrides = explore_overrides
     n = len(card.card["drones"])
     if args.n is not None and int(args.n) != n:
         print(f"--n {args.n} 和场景 {card.name} 的飞机数 {n} 不一致", file=sys.stderr)
@@ -335,6 +345,9 @@ def main(argv: list[str] | None = None) -> int:
             plan["upstream_deviation"] = True
         if args.shadow_tracking_align:
             plan["shadow_tracking_align"] = True
+            plan["upstream_deviation"] = True
+        if explore_overrides:
+            plan["explore_overrides"] = list(explore_overrides)
             plan["upstream_deviation"] = True
         plan["b2"] = {"plan_diag": bool(args.plan_diag), "deviations": list(b2_deviations), "fix": dict(args.b2_fix_cfg)}
         _write(args.out, plan)
@@ -489,7 +502,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
     truth: dict = {}  # 票 B2：gz 真值位置，记录器建好前先有这个 dict，订阅回调往里写
     truth_lock = threading.Lock()
     plan_diag = None
-    if args.plan_diag and session.fleet is not None and hasattr(session.fleet, "ingest"):
+    if args.plan_diag and session.fleet is not None and hasattr(session.fleet, "ingest") and hasattr(session.fleet, "_yopo_options"):
         plan_diag = PlanDiag(
             session.fleet,
             card.min_distance,
@@ -837,6 +850,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         payload["b2_plan_diag"] = plan_diag.summary()
     if getattr(args, "b2_deviations", None):
         payload["b2_deviations"] = list(args.b2_deviations)
+    if getattr(args, "explore_overrides", None):
+        payload["explore_overrides"] = list(args.explore_overrides)
     if getattr(session.fleet, "b3", None):
         payload["b3"] = {"config": dict(session.fleet.b3), "counts": dict(session.fleet.b3_counts)}
     if stepper is not None:

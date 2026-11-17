@@ -55,9 +55,9 @@ SITL_LINE_SPACING_M = 3.0
 # ``--partial`` 只跑这么长的前缀，用来做离线校验，不等到达。
 PARTIAL_PREFIX_S = 0.5
 POSITIONING_MODES = ("default", "rtk")
-LIVE_POLICIES = ("upstream", "formation", "crossing", "switch")
-# 票 S7：带协议 fleet 的实飞策略。策略名必须和场景卡 task.type 相同，机间消息留在进程内总线。
-FLEET_POLICIES = ("formation", "crossing", "switch")
+LIVE_POLICIES = ("upstream", "formation", "crossing", "switch", "explore")
+# 票 S7 / explore-sitl：带进程内 MessageBus 协同 fleet 的实飞策略。策略名必须和场景卡 task.type 相同。
+FLEET_POLICIES = ("formation", "crossing", "switch", "explore")
 VEHICLE_CMD_NAV_LAND = 21  # MAV_CMD_NAV_LAND，与 offboard_mission 同一条命令号
 GCS_PORT_BASE = 18570
 # 与 yopo_l0.runner 的总线盐相同。零故障时这条随机流不被消耗。
@@ -780,8 +780,33 @@ def normalize_positioning(value: str | None) -> str:
     return text
 
 
+def apply_explore_velocity_override(
+    card: SceneCard, velocity_mps: float | None
+) -> tuple[SceneCard, list[str]]:
+    """在内存里覆写 explore 场景卡 ``task.velocity_mps``（不改落盘 JSON，也不写 PX4 参数）。"""
+    if velocity_mps is None:
+        return card, []
+    vel = float(velocity_mps)
+    if not math.isfinite(vel) or vel <= 0.0:
+        raise ValueError(f"velocity_mps 必须是正有限数，收到 {velocity_mps!r}")
+    task = dict(card.card.get("task") or {})
+    if str(task.get("type") or "") != "explore":
+        raise ValueError(f"--velocity-mps 只适用于 task.type=explore 的场景卡，收到 {task.get('type')!r}")
+    task["velocity_mps"] = vel
+    dyn = dict(card.card.get("dynamics") or {})
+    cur_a = float(dyn.get("a_max", 6.0))
+    ratio = vel / 6.0
+    needed_a = round(1.18 * 6.0 * ratio * ratio, 3)
+    notes = [f"explore.velocity_mps={vel:g}"]
+    if needed_a > cur_a:
+        dyn["a_max"] = needed_a
+        notes.append(f"dynamics.a_max={needed_a:g}")
+    updated = {**card.card, "task": task, "dynamics": dyn}
+    return SceneCard(card.path, updated, card.obstacles), notes
+
+
 def resolve_live_policy(card: SceneCard, policy: str | None) -> str:
-    """实飞策略。formation / crossing / switch 只接同名 task.type 的卡，机间消息留在进程内总线。"""
+    """实飞策略。formation / crossing / switch / explore 只接同名 task.type 的卡，机间消息留在进程内总线。"""
     name = "upstream" if policy is None or str(policy).strip() == "" else str(policy).strip().lower()
     if name not in LIVE_POLICIES:
         raise ValueError(f"policy 只要 {' 或 '.join(LIVE_POLICIES)}，收到 {policy!r}")
@@ -794,7 +819,7 @@ def resolve_live_policy(card: SceneCard, policy: str | None) -> str:
 
 
 def _fleet_for(name: str, card: SceneCard, physics_dt: float):
-    """按策略名建同一套 L0 协议 fleet。crossing / switch 只在用到时导入。"""
+    """按策略名建同一套 L0 协同 fleet。crossing / switch / explore 只在用到时导入。"""
     if name == "formation":
         return FormationFleet.from_card(card.card, float(physics_dt))
     if name == "crossing":
@@ -805,6 +830,10 @@ def _fleet_for(name: str, card: SceneCard, physics_dt: float):
         from .switch import SwitchFleet
 
         return SwitchFleet.from_card(card.card, float(physics_dt))
+    if name == "explore":
+        from .explore import ExploreFleet
+
+        return ExploreFleet.from_card(card.card, float(physics_dt))
     return None
 
 
@@ -1451,9 +1480,189 @@ def _formation_plan_code(fleet, drone_id: str) -> str | None:
     if fleet is None:
         return None
     last = getattr(fleet, "_last_rec", None)
-    if not isinstance(last, dict) or drone_id not in last:
+    if isinstance(last, dict):
+        if drone_id not in last:
+            return None
+        return fleet.code(drone_id)
+    code_fn = getattr(fleet, "code", None)
+    if not callable(code_fn):
         return None
-    return fleet.code(drone_id)
+    try:
+        return code_fn(drone_id)
+    except KeyError:
+        return None
+
+
+def _cross_x_time(t_prev: float, x_prev: float, t_curr: float, x_curr: float, x_target: float) -> float | None:
+    """线性插值计算 ``x`` 首次越过 ``x_target`` 的协议时刻。"""
+    if x_prev >= x_target:
+        return float(t_prev)
+    if x_curr < x_target:
+        return None
+    dx = float(x_curr) - float(x_prev)
+    if dx <= 1e-12:
+        return float(t_curr)
+    alpha = max(0.0, min(1.0, (float(x_target) - float(x_prev)) / dx))
+    return float(t_prev) + alpha * (float(t_curr) - float(t_prev))
+
+
+class _ExploreSitlTelemetry:
+    """只读记录 ``policy=explore`` 在 SITL 实飞中的横线起飞对齐、穿林速度与自由终端悬停指标。"""
+
+    def __init__(self, card: SceneCard) -> None:
+        raw = card.card
+        task = dict(raw.get("task") or {})
+        drones = list(raw.get("drones") or [])
+        has_forest = isinstance(raw.get("forest"), dict)
+        starts_xy = [(float(d["start_enu"][0]), float(d["start_enu"][1])) for d in drones]
+        xs = [pt[0] for pt in starts_xy]
+        ys = sorted(pt[1] for pt in starts_xy)
+        gaps = [float(ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
+        x_span = 0.0 if not xs else float(max(xs) - min(xs))
+        self.spawn_summary = {
+            "aligned_x": bool(x_span <= 1e-6),
+            "x0_m": None if not xs else float(xs[0]),
+            "spawn_x_span_m": x_span,
+            "y_sorted_m": ys,
+            "lateral_gaps_m": gaps,
+            "uniform_lateral_spacing": bool(len(gaps) <= 1 or (max(gaps) - min(gaps) <= 1e-6)),
+        }
+        default_goal_x = 42.0 if has_forest else 19.5
+        default_finish_x = 32.0 if has_forest else 15.5
+        default_span = [8.0, 30.0] if has_forest else [3.7, 14.8]
+        span_raw = task.get("obstacle_x_span_m", default_span)
+        self.x_goal_m = float(task.get("x_goal_m", default_goal_x))
+        self.x_finish_m = float(task.get("x_finish_m", default_finish_x))
+        self.belt_lo_m = float(span_raw[0])
+        self.belt_hi_m = float(span_raw[1])
+        self.velocity_target_mps = float(task.get("velocity_mps", 9.0))
+        self.launch_t_s: float | None = None
+        self.handover_positions_enu: dict[str, list[float]] = {}
+        self._prev_tx: dict[str, tuple[float, float]] = {}
+        self._belt_enter: dict[str, float] = {}
+        self._belt_exit: dict[str, float] = {}
+        self._finish_t: dict[str, float] = {}
+        self._belt_speeds: dict[str, list[float]] = {str(d["id"]): [] for d in drones}
+        self._peak_speed: dict[str, float] = {str(d["id"]): 0.0 for d in drones}
+
+    def note_launch(self, now_s: float, slots: list[_LiveSlot], decoded: dict[str, dict | None]) -> None:
+        if self.launch_t_s is not None:
+            return
+        self.launch_t_s = float(now_s)
+        for slot in slots:
+            did = slot.bridge.drone_id
+            st = decoded.get(slot.ident["namespace"])
+            pos = slot.position if st is None else np.asarray(st["position_enu"], dtype=float)
+            if pos is not None:
+                vec = _vec_list(pos)
+                self.handover_positions_enu[did] = vec
+                x0 = float(vec[0])
+                self._prev_tx[did] = (0.0, x0)
+                if x0 >= self.belt_lo_m:
+                    self._belt_enter[did] = 0.0
+                if x0 >= self.belt_hi_m:
+                    self._belt_exit[did] = 0.0
+                if x0 >= self.x_finish_m:
+                    self._finish_t[did] = 0.0
+
+    def note_step(self, drone_id: str, t_plan_s: float, position_enu, velocity_enu) -> None:
+        p = np.asarray(position_enu, dtype=float).reshape(3)
+        v = np.asarray(velocity_enu, dtype=float).reshape(3)
+        t = float(t_plan_s)
+        x = float(p[0])
+        spd = float(np.linalg.norm(v))
+        self._peak_speed[drone_id] = max(self._peak_speed.get(drone_id, 0.0), spd)
+        if self.belt_lo_m <= x <= self.belt_hi_m:
+            self._belt_speeds.setdefault(drone_id, []).append(spd)
+        prev = self._prev_tx.get(drone_id)
+        if prev is None:
+            if x >= self.belt_lo_m and drone_id not in self._belt_enter:
+                self._belt_enter[drone_id] = t
+            if x >= self.belt_hi_m and drone_id not in self._belt_exit:
+                self._belt_exit[drone_id] = t
+            if x >= self.x_finish_m and drone_id not in self._finish_t:
+                self._finish_t[drone_id] = t
+        else:
+            t0, x0 = prev
+            if drone_id not in self._belt_enter:
+                tc = _cross_x_time(t0, x0, t, x, self.belt_lo_m)
+                if tc is not None:
+                    self._belt_enter[drone_id] = tc
+            if drone_id not in self._belt_exit:
+                tc = _cross_x_time(t0, x0, t, x, self.belt_hi_m)
+                if tc is not None:
+                    self._belt_exit[drone_id] = tc
+            if drone_id not in self._finish_t:
+                tc = _cross_x_time(t0, x0, t, x, self.x_finish_m)
+                if tc is not None:
+                    self._finish_t[drone_id] = tc
+        self._prev_tx[drone_id] = (t, x)
+
+    def summary(self, slots: list[_LiveSlot], fleet) -> dict:
+        handover_xs = [pos[0] for pos in self.handover_positions_enu.values()]
+        handover_ys = sorted(pos[1] for pos in self.handover_positions_enu.values())
+        handover_span = None if not handover_xs else float(max(handover_xs) - min(handover_xs))
+        belt_span = max(0.0, self.belt_hi_m - self.belt_lo_m)
+        per_drone: dict[str, dict] = {}
+        belt_avg_list: list[float] = []
+        sample_all: list[float] = []
+        locked_fn = getattr(fleet, "terminal_locked", None)
+        for slot in slots:
+            did = slot.bridge.drone_id
+            t_in = self._belt_enter.get(did)
+            t_out = self._belt_exit.get(did)
+            t_fin = self._finish_t.get(did)
+            trav = None
+            avg_spd = None
+            if t_in is not None and t_out is not None and t_out > t_in + 1e-9 and belt_span > 0.0:
+                trav = float(t_out - t_in)
+                avg_spd = float(belt_span / trav)
+                belt_avg_list.append(avg_spd)
+            samples = self._belt_speeds.get(did) or []
+            sample_all.extend(samples)
+            locked = bool(locked_fn(did)) if callable(locked_fn) else None
+            per_drone[did] = {
+                "t_belt_enter_s": t_in,
+                "t_belt_exit_s": t_out,
+                "belt_traversal_s": trav,
+                "belt_avg_speed_mps": avg_spd,
+                "belt_sample_speed_mean_mps": None if not samples else float(np.mean(samples)),
+                "t_finish_after_launch_s": t_fin,
+                "peak_speed_mps": float(self._peak_speed.get(did, 0.0)),
+                "terminal_locked": locked,
+                "terminal_goal_enu": _vec_list(slot.bridge.goal),
+            }
+        all_finish = (
+            max(self._finish_t[slot.bridge.drone_id] for slot in slots)
+            if slots and all(slot.bridge.drone_id in self._finish_t for slot in slots)
+            else None
+        )
+        all_belt_exit = (
+            max(self._belt_exit[slot.bridge.drone_id] for slot in slots)
+            if slots and all(slot.bridge.drone_id in self._belt_exit for slot in slots)
+            else None
+        )
+        return {
+            "velocity_target_mps": self.velocity_target_mps,
+            "speed_ratio": float(self.velocity_target_mps / 6.0),
+            "x_goal_m": self.x_goal_m,
+            "x_finish_m": self.x_finish_m,
+            "obstacle_x_span_m": [self.belt_lo_m, self.belt_hi_m],
+            "horizontal_line_spawn": dict(self.spawn_summary),
+            "takeoff_handover": {
+                "launch_t_s": self.launch_t_s,
+                "positions_enu": dict(self.handover_positions_enu),
+                "handover_x_span_m": handover_span,
+                "handover_y_sorted_m": handover_ys,
+            },
+            "all_crossed_belt_after_launch_s": all_belt_exit,
+            "all_crossed_finish_after_launch_s": all_finish,
+            "belt_avg_speed_mean_mps": None if not belt_avg_list else float(np.mean(belt_avg_list)),
+            "belt_avg_speed_min_mps": None if not belt_avg_list else float(min(belt_avg_list)),
+            "belt_sample_speed_mean_mps": None if not sample_all else float(np.mean(sample_all)),
+            "peak_speed_mps": max(self._peak_speed.values(), default=0.0),
+            "per_drone": per_drone,
+        }
 
 
 class LiveFleetSession:
@@ -1481,7 +1690,7 @@ class LiveFleetSession:
         if policy not in LIVE_POLICIES:
             raise ValueError(f"policy 只要 {' 或 '.join(LIVE_POLICIES)}，收到 {policy!r}")
         if (fleet is None) != (policy not in FLEET_POLICIES):
-            raise ValueError("formation / crossing / switch 会话要带同名 fleet，其他策略不带")
+            raise ValueError("formation / crossing / switch / explore 会话要带同名 fleet，其他策略不带")
         if policy in FLEET_POLICIES and bus is None:
             raise ValueError(f"{policy} 会话要带 MessageBus")
         self.card = card
@@ -1489,6 +1698,7 @@ class LiveFleetSession:
         self.policy = policy
         self.fleet = fleet
         self.bus = bus
+        self._explore_telemetry = _ExploreSitlTelemetry(card) if policy == "explore" else None
         self._plan_origin: float | None = None
         self._formation_t: float | None = None
         self.slots = [_LiveSlot(bridge, ident, cfg.initial_phase) for bridge, ident in zip(bridges, idents)]
@@ -1578,6 +1788,8 @@ class LiveFleetSession:
         if any(slot.phase != "PLAN" for slot in self.slots):
             return
         now_s = float(now_s)
+        if self._plan_origin is None and self._explore_telemetry is not None:
+            self._explore_telemetry.note_launch(now_s, self.slots, self._decoded)
         self._fleet_ingest(now_s)
         if self._plan_origin is None:
             self._plan_origin = now_s
@@ -1600,7 +1812,7 @@ class LiveFleetSession:
         self._formation_t = t
 
     def _fleet_ingest(self, now_s: float) -> None:
-        """crossing 的提案要本机深度：按场景卡相机频率在里程计位姿上渲染，和 L0 一样每拍喂最新一帧。
+        """crossing / explore 的提案要本机深度：按场景卡相机频率在里程计位姿上渲染，和 L0 一样每拍喂最新一帧。
 
         formation / switch 没有 ingest，不进这里。深度来自场景卡几何，不依赖 Gazebo 里有没有模型。
         """
@@ -1609,6 +1821,11 @@ class LiveFleetSession:
             return
         cam_hz = float((self.card.card.get("rates_hz") or {}).get("camera", 30.0))
         period = 1.0 / cam_hz if cam_hz > 0.0 else 0.0
+        ingest_t = (
+            (0.0 if self._plan_origin is None else max(0.0, float(now_s) - float(self._plan_origin)))
+            if self.policy == "explore"
+            else float(now_s)
+        )
         for slot in self.slots:
             state = self._decoded.get(slot.ident["namespace"])
             if state is None:
@@ -1618,19 +1835,41 @@ class LiveFleetSession:
             frame = slot.fleet_frame
             if frame is None or last is None or now_s - last >= period - 1e-9:
                 frame = _LazyDepthFrame(
-                    slot.bridge.camera, np.asarray(state["position_enu"], dtype=float), float(state["yaw_enu"]), now_s
+                    slot.bridge.camera, np.asarray(state["position_enu"], dtype=float), float(state["yaw_enu"]), ingest_t
                 )
                 slot.fleet_frame = frame
                 self._last_capture[did] = now_s
+            acc = (
+                np.asarray(state["acceleration_enu"], dtype=float).copy()
+                if self.policy == "explore" and state.get("acceleration_enu") is not None
+                else np.zeros(3)
+            )
             view = State(
                 p=np.asarray(state["position_enu"], dtype=float).copy(),
                 v=np.asarray(state["velocity_enu"], dtype=float).copy(),
-                a=np.zeros(3),
+                a=acc,
                 yaw=float(state["yaw_enu"]),
-                t=float(now_s),
+                t=ingest_t,
             )
             ingest(did, frame, view)
             slot.depth_source = "scene-card"
+
+    def _explore_terminal_pva(
+        self, slot: _LiveSlot, p: np.ndarray, v: np.ndarray, a: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """explore 进入终点无障碍区并锁定无冲突驻留点后，直接下发静止位置设定点避免里程计重锚振荡。"""
+        if self.policy != "explore" or self.fleet is None:
+            return p, v, a
+        did = slot.bridge.drone_id
+        locked_fn = getattr(self.fleet, "terminal_locked", None)
+        if not (callable(locked_fn) and locked_fn(did)):
+            return p, v, a
+        goal = np.asarray(self.fleet.goal_of(did), dtype=float).copy()
+        slot.bridge.goal = goal
+        if self.fleet.code(did) == "ARRIVED_HOLD" and slot.position is not None:
+            if float(np.linalg.norm(slot.position - goal)) <= 5.0:
+                return goal.copy(), np.zeros(3), np.zeros(3)
+        return p, v, a
 
     def _formation_stream(self, namespace: str, now_s: float) -> dict | None:
         """心跳只读已经提交的采样器。不调用 sample，也不再 exchange。"""
@@ -1647,6 +1886,12 @@ class LiveFleetSession:
                 return None
             lead = float(self.cfg.setpoint_lead_s)
             p, v, a = sampler.pva(t + lead if lead > 0.0 else t)
+            p, v, a = self._explore_terminal_pva(
+                slot,
+                np.asarray(p, dtype=float),
+                np.asarray(v, dtype=float),
+                np.asarray(a, dtype=float),
+            )
             world = trajectory_setpoint_ned(p, v, a, float(sampler.yaw), now_s)
             return setpoint_to_local(world, slot.offset_enu)
         return None
@@ -1919,28 +2164,43 @@ class LiveFleetSession:
             )
         did = slot.bridge.drone_id
         self.fleet.observe(did, float(t), state["position_enu"])
+        if self._explore_telemetry is not None:
+            self._explore_telemetry.note_step(did, float(t), state["position_enu"], state["velocity_enu"])
         sampler = self.fleet.track(did, float(t))
         lead = float(self.cfg.setpoint_lead_s)
         p, v, a, yaw = sampler.sample(float(t) + lead if lead > 0.0 else float(t))
         slot.formation_sampler = sampler
-        self._observe_shadow(slot, now_s, state, planned=self.fleet.code(did) == "LOCAL_APPROVED")
+        code_now = self.fleet.code(did)
+        is_planned = (
+            code_now not in ("", "LOCAL_HOVER", None)
+            if self.policy == "explore"
+            else code_now == "LOCAL_APPROVED"
+        )
+        self._observe_shadow(slot, now_s, state, planned=is_planned)
         source = "scene-card" if getattr(self.fleet, "ingest", None) is not None else "formation"
         p = np.asarray(p, dtype=float).copy()
         v = np.asarray(v, dtype=float).copy()
         a = np.asarray(a, dtype=float).copy()
+        if self.policy == "explore":
+            slot.bridge.goal = np.asarray(self.fleet.goal_of(did), dtype=float).copy()
+            p, v, a = self._explore_terminal_pva(slot, p, v, a)
         if self.cfg.setpoint_gain_p > 0.0 or self.cfg.setpoint_gain_v > 0.0:
             from yopo_l0.b2_plan_diag import stiffen  # 票 B2，默认不进来
 
             p, v = stiffen(p, v, state, float(self.cfg.setpoint_gain_p), float(self.cfg.setpoint_gain_v))
         setpoint = trajectory_setpoint_ned(p, v, a, float(yaw), now_s)
-        self._note_arrival(slot, now_s, state["position_enu"], state["velocity_enu"])
+        if self.policy == "explore":
+            if slot.arrival is None:
+                self._note_arrival(slot, now_s, state["position_enu"], state["velocity_enu"])
+        else:
+            self._note_arrival(slot, now_s, state["position_enu"], state["velocity_enu"])
         return self._pack(
             slot,
             now_s,
             heartbeat=True,
             setpoint=setpoint,
             commands=[],
-            planned=self.fleet.code(did) == "LOCAL_APPROVED",
+            planned=is_planned,
             depth_source=source,
             roundtrip=roundtrip_abs(p),
             position=state["position_enu"],
@@ -2121,7 +2381,7 @@ class LiveFleetSession:
             block = self.fleet.summary(arrived, n)
             key = getattr(self.fleet, "result_key", "formation")
             payload[key] = block
-            payload["formation_error_p95_m"] = block["error_p95_m"]
+            payload["formation_error_p95_m"] = block.get("error_p95_m")
             payload["formation_t0_s"] = self._plan_origin
             payload["formation_time_s"] = self._formation_t
             payload["inter_drone_transport"] = "inprocess"
@@ -2132,6 +2392,8 @@ class LiveFleetSession:
                 "reorder": float(self.bus.faults.reorder),
                 **self.bus.counts(),
             }
+            if self._explore_telemetry is not None:
+                payload["explore_sitl"] = self._explore_telemetry.summary(self.slots, self.fleet)
         payload["shadow"] = bool(self.shadow)
         payload["shadow_reject_rate"] = None
         payload["shadow_reject_histogram"] = None

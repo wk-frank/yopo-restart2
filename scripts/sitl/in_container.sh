@@ -70,6 +70,15 @@ case "$SCENE_WORLD" in
   *) echo "未知 YOPO_SITL_SCENE_WORLD=$SCENE_WORLD（只要 0 或 1）" >&2; exit 2 ;;
 esac
 default_yopo_scene() {
+  if [[ "${YOPO_L0_POLICY:-upstream}" == "explore" ]]; then
+    if [[ "$N" -eq 6 ]]; then
+      printf '%s\n' "scenes/explore-6-forest-sitl80.json"
+      return 0
+    elif [[ "$N" -eq 3 ]]; then
+      printf '%s\n' "scenes/explore-3-forest-sitl80.json"
+      return 0
+    fi
+  fi
   if [[ "$N" -eq 1 ]]; then
     printf '%s
 ' "scenes/g2-pillar.json"

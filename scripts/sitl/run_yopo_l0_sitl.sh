@@ -28,8 +28,9 @@ FLEET_SHADOW="${YOPO_FLEET_SHADOW:-0}"
 SHADOW_CONTRACT_ALIGN="${YOPO_SHADOW_CONTRACT_ALIGN:-0}"
 SHADOW_TRACKING_ALIGN="${YOPO_SHADOW_TRACKING_ALIGN:-0}"
 SCENE_WORLD="${YOPO_SITL_SCENE_WORLD:-0}"
+EXPLORE_VELOCITY_MPS="${YOPO_EXPLORE_VELOCITY_MPS:-}"
 usage() {
-  echo "用法：$0 [--scene 场景卡] [--n 1|2|3|6] [--policy upstream|formation|crossing|switch] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--scene-world] [--dry-run]"
+  echo "用法：$0 [--scene 场景卡] [--n 1|2|3|6] [--policy upstream|formation|crossing|switch|explore] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--scene-world] [--velocity-mps 米每秒] [--dry-run]"
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,6 +68,8 @@ while [[ $# -gt 0 ]]; do
     --shadow-contract-align) SHADOW_CONTRACT_ALIGN=1; shift ;;
     --shadow-tracking-align) SHADOW_TRACKING_ALIGN=1; shift ;;
     --scene-world) SCENE_WORLD=1; shift ;;
+    --velocity-mps) EXPLORE_VELOCITY_MPS="${2:-}"; shift 2 ;;
+    --velocity-mps=*) EXPLORE_VELOCITY_MPS="${1#*=}"; shift ;;
     --dry-run) DRY=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
@@ -77,9 +80,9 @@ if [[ "$POSITIONING" != "default" && "$POSITIONING" != "rtk" ]]; then
   exit 2
 fi
 case "$POLICY" in
-  upstream|formation|crossing|switch) ;;
+  upstream|formation|crossing|switch|explore) ;;
   *)
-  echo "未知 --policy=$POLICY（只要 upstream、formation、crossing 或 switch）" >&2
+  echo "未知 --policy=$POLICY（只要 upstream、formation、crossing、switch 或 explore）" >&2
   exit 2
   ;;
 esac
@@ -111,12 +114,27 @@ if ! [[ "$AGENT_DELAY_S" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
   echo "--agent-delay-s 要非负数，收到 $AGENT_DELAY_S" >&2
   exit 2
 fi
+if [[ -n "$EXPLORE_VELOCITY_MPS" ]]; then
+  if ! [[ "$EXPLORE_VELOCITY_MPS" =~ ^[0-9]+([.][0-9]+)?$ ]] || [[ "$EXPLORE_VELOCITY_MPS" =~ ^0+([.]0+)?$ ]]; then
+    echo "--velocity-mps 要正数，收到 $EXPLORE_VELOCITY_MPS" >&2
+    exit 2
+  fi
+fi
 case "$N" in
   1|2|3|6) ;;
   *) echo "未知 --n=$N（只要 1、2、3 或 6）" >&2; exit 2 ;;
 esac
 if [[ -z "$SCENE" ]]; then
-  if [[ "$N" == "6" ]]; then
+  if [[ "$POLICY" == "explore" ]]; then
+    if [[ "$N" == "6" ]]; then
+      SCENE="scenes/explore-6-forest-sitl80.json"
+    elif [[ "$N" == "3" ]]; then
+      SCENE="scenes/explore-3-forest-sitl80.json"
+    else
+      echo "--policy explore 在 --n $N 下需要显式 --scene" >&2
+      exit 2
+    fi
+  elif [[ "$N" == "6" ]]; then
     SCENE="scenes/formation-6-open-sitl80.json"
   elif [[ "$N" == "3" ]]; then
     SCENE="scenes/swap-3-open.json"
@@ -153,6 +171,9 @@ RUNTIME_IMAGE="$(choose_runtime_image)"
 if [[ "$DRY" == "1" ]]; then
   printf 'planner=yopo-l0\nscene=%s\nn=%s\npolicy=%s\npositioning=%s\nseed=%s\nimage=%s\nlockstep=%s\nagent_delay_s=%s\nshadow_env_evidence=%s\nfleet_shadow=%s\nshadow_contract_align=%s\nshadow_tracking_align=%s\nscene_world=%s\n' \
     "$SCENE" "$N" "$POLICY" "$POSITIONING" "$SEED" "$RUNTIME_IMAGE" "$LOCKSTEP" "$AGENT_DELAY_S" "$SHADOW_ENV_EVIDENCE" "$FLEET_SHADOW" "$SHADOW_CONTRACT_ALIGN" "$SHADOW_TRACKING_ALIGN" "$SCENE_WORLD"
+  if [[ -n "$EXPLORE_VELOCITY_MPS" ]]; then
+    printf 'velocity_mps=%s\n' "$EXPLORE_VELOCITY_MPS"
+  fi
   exit 0
 fi
 python3 "$SITL_DIR/fleet.py" layout --n "$N" --format json >/dev/null
@@ -219,6 +240,7 @@ if "${DOCKER[@]}" ps -q -f "name=^${NAME}$" | grep -q .; then
     -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \
     -e YOPO_SHADOW_CONTRACT_ALIGN="$SHADOW_CONTRACT_ALIGN" -e YOPO_SHADOW_TRACKING_ALIGN="$SHADOW_TRACKING_ALIGN" \
     -e YOPO_SITL_SCENE_WORLD="$SCENE_WORLD" \
+    -e YOPO_EXPLORE_VELOCITY_MPS="$EXPLORE_VELOCITY_MPS" \
     -e YOPO_B2_PLAN_DIAG="${YOPO_B2_PLAN_DIAG:-}" -e YOPO_B2_SAFE_RADIUS="${YOPO_B2_SAFE_RADIUS:-}" -e YOPO_B2_FIX="${YOPO_B2_FIX:-}" \
     -e YOPO_SITL_WALL_TIMEOUT="${YOPO_SITL_WALL_TIMEOUT:-900}" \
     "${cache_env[@]}" \
@@ -256,6 +278,7 @@ set +e
   -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \
   -e YOPO_SHADOW_CONTRACT_ALIGN="$SHADOW_CONTRACT_ALIGN" -e YOPO_SHADOW_TRACKING_ALIGN="$SHADOW_TRACKING_ALIGN" \
   -e YOPO_SITL_SCENE_WORLD="$SCENE_WORLD" \
+  -e YOPO_EXPLORE_VELOCITY_MPS="$EXPLORE_VELOCITY_MPS" \
   -e YOPO_B2_PLAN_DIAG="${YOPO_B2_PLAN_DIAG:-}" -e YOPO_B2_SAFE_RADIUS="${YOPO_B2_SAFE_RADIUS:-}" -e YOPO_B2_FIX="${YOPO_B2_FIX:-}" \
   -e YOPO_SITL_WALL_TIMEOUT="${YOPO_SITL_WALL_TIMEOUT:-900}" \
   -e YOPO_POSITIONING="$POSITIONING" \
