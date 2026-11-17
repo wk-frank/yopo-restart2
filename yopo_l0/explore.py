@@ -345,14 +345,20 @@ class _FastObstacleField:
             g_min = float(np.min(p[:, 2] - self.ground_z))
             best = min(best, max(g_min, 0.0))
         if self.has_up:
-            dx = p[:, None, 0] - self.up_xy[None, :, 0]
-            dy = p[:, None, 1] - self.up_xy[None, :, 1]
-            dr = np.maximum(np.hypot(dx, dy) - self.up_r[None, :], 0.0)
-            dz = np.maximum(
-                np.maximum(self.up_zlo[None, :] - p[:, None, 2], p[:, None, 2] - self.up_zhi[None, :]),
-                0.0,
-            )
-            best = min(best, float(np.min(np.hypot(dr, dz))))
+            mask = np.ones(len(self.up_r), dtype=bool)
+            if len(self.up_r) >= 200 and math.isfinite(best):
+                lo, hi = np.min(p[:, :2], axis=0), np.max(p[:, :2], axis=0)
+                delta = np.maximum(np.maximum(lo - self.up_xy, self.up_xy - hi), 0.0)
+                mask = np.linalg.norm(delta, axis=1) - self.up_r <= best
+            if np.any(mask):
+                dx = p[:, None, 0] - self.up_xy[None, mask, 0]
+                dy = p[:, None, 1] - self.up_xy[None, mask, 1]
+                dr = np.maximum(np.hypot(dx, dy) - self.up_r[None, mask], 0.0)
+                dz = np.maximum(
+                    np.maximum(self.up_zlo[None, mask] - p[:, None, 2], p[:, None, 2] - self.up_zhi[None, mask]),
+                    0.0,
+                )
+                best = min(best, float(np.min(np.hypot(dr, dz))))
         if self.has_ln:
             rel = p[:, None, :] - self.ln_a[None, :, :]
             axial = np.einsum("mnk,nk->mn", rel, self.ln_axis)
@@ -474,6 +480,10 @@ class ExploreFleet:
             s_vec = np.array([_finite_float(f"{did}.start_enu[{k}]", raw_s[k]) for k in range(3)], dtype=float)
             self.starts[did] = s_vec
 
+        cohesion = task.get("cohesion") or {}
+        self.cohesion_span_m = _nonneg_float("cohesion.max_progress_span_m", cohesion.get("max_progress_span_m", 0.0))
+        self.cohesion_lateral_gain = _nonneg_float("cohesion.lateral_gain", cohesion.get("lateral_gain", 0.0))
+        self.cohesion_holds = 0
         self.dt = _positive_float("physics_dt", physics_dt)
         self.record_inputs = bool(record_inputs)
         self.input_digests: list[str] = []
@@ -885,6 +895,7 @@ class ExploreFleet:
             wall_pen = 0.8 * abs(cy_raw - cy)
             smooth_pen = 0.07 * abs(cy - prev_y)
             util = 2.2 * cos_w + 0.42 * min(d_mid, 15.0) - peer_pen - wall_pen - smooth_pen
+            util -= self.cohesion_lateral_gain * abs(cy - float(self.starts[did][1]))
             scored.append((util, np.array([cx, cy, cz], dtype=float), float(cy), d_mid))
 
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -1126,6 +1137,17 @@ class ExploreFleet:
         frame, p_meas, _v_meas, _a_meas, yaw = sense
         head = self._head_state(did, now)
         peers = list(self._peer_heard_tubes[did].values())
+        if self.cohesion_span_m > 0.0:
+            tubes = self._peer_heard_tubes[did].values()
+            peer_x = [float(np.interp(now, tube[:, 0], tube[:, 1])) for tube in tubes if tube.size]
+            if peer_x and float(head[0, 0]) > min(peer_x) + self.cohesion_span_m:
+                brake = _fast_brake_traj(now, head, self.limits)
+                if brake is None:
+                    brake = hold_traj(head[0], now, .5)
+                if self._check_traj_safety(brake, peers)[0]:
+                    self.cohesion_holds += 1
+                    self._count(did, "COHESION_BRAKE")
+                    return self._set_commit(did, brake)
 
         # 已在锁定终点停稳：保持静止，不再重复跑网络
         locked = self._terminal_goal.get(did)

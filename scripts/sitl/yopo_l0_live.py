@@ -194,6 +194,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="upstream",
         help="upstream 走 YOPO。formation / crossing / switch / explore 只用于同名 task.type 的卡，机间消息留在进程内总线",
     )
+    ap.add_argument("--control-mode", choices=("pva", "ctbr"), default=os.environ.get("YOPO_CONTROL_MODE", "pva"))
+    ap.add_argument("--record-dt", type=float, default=float(os.environ.get("YOPO_RECORD_DT", "0")))
     ap.add_argument("--world", default="default")
     ap.add_argument("--preflight-timeout", type=float, default=240.0)
     ap.add_argument("--dry-run", action="store_true", help="只写话题和定位模式，不连 ROS")
@@ -303,6 +305,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.physics_step > 0.0 or args.agent_delay_s < 0.0:
         print("--physics-step 必须为正，--agent-delay-s 不能为负", file=sys.stderr)
         return 2
+    if args.control_mode == "ctbr" and not args.lockstep:
+        print("CTBR requires --lockstep for fresh 50 Hz feedback", file=sys.stderr)
+        return 2
     positioning = _positioning(args.positioning)
     card = load_card(_scene_path(args.scene))
     try:
@@ -331,6 +336,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.dry_run:
         plan = live_topic_plan(card, positioning=positioning, seed=args.seed, policy=policy)
+        if args.control_mode != "pva":
+            plan["control_mode"] = args.control_mode
+            plan["rates_topics"] = {ns: ("/" + ns.strip("/") if ns else "") + "/fmu/in/vehicle_rates_setpoint" for ns in plan["namespaces"]}
         plan["lockstep"] = lockstep_plan(card, args)
         plan["scene_world"] = scene_world_plan(card, args)
         if args.shadow_env_evidence or args.fleet_shadow:
@@ -462,6 +470,28 @@ def _fill(msg, fields: dict):
     return msg
 
 
+def calibrate_hover_thrust(session):
+    """Read uORB in paused Gazebo during steady TAKEOFF, without writing parameters."""
+    import re
+    import subprocess
+    listener = "/opt/PX4-Autopilot/build/px4_sitl_default/bin/px4-listener"
+    for slot in session.slots:
+        if (slot.ctbr is None or slot.hover_calibration_attempted or slot.phase != "TAKEOFF"
+                or slot.settle_since is None or slot.velocity is None):
+            continue
+        slot.hover_calibration_attempted = True
+        try:
+            result = subprocess.run([listener, "--instance", str(slot.ident["instance"]),
+                                     "vehicle_attitude_setpoint", "-n", "1"],
+                                    capture_output=True, text=True, timeout=2.0)
+            match = re.search(r"thrust_body:\s*\[([^]]+)\]", result.stdout)
+            if match:
+                thrust = -float(match.group(1).split(",")[2])
+                slot.ctbr.hover.observe_hover(thrust, float(slot.velocity[2]), 0.0)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+
+
 def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no cover - 需要 rclpy / px4_msgs
     import rclpy
     from px4_msgs.msg import (
@@ -471,6 +501,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         VehicleLandDetected,
         VehicleOdometry,
         VehicleStatus,
+        VehicleRatesSetpoint,
     )
     from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
     from sensor_msgs.msg import Image
@@ -490,6 +521,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
             depth_source="auto",
             initial_phase="WARMUP",
             plan_timeout_s=plan_timeout_s,
+            control_mode=args.control_mode,
+            record_dt_s=args.record_dt,
             shadow_env_evidence=bool(args.shadow_env_evidence),
             fleet_shadow=bool(args.fleet_shadow),
             shadow_contract_align=bool(args.shadow_contract_align),
@@ -499,6 +532,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
             setpoint_gain_v=float(getattr(args, "b2_fix_cfg", {}).get("setpoint_gain_v", 0.0)),
         ),
     )
+    from yopo_l0.flight_evidence import FlightTruthMeter
+    truth_meter = FlightTruthMeter(card) if args.record_dt > 0.0 else None
     truth: dict = {}  # 票 B2：gz 真值位置，记录器建好前先有这个 dict，订阅回调往里写
     truth_lock = threading.Lock()
     plan_diag = None
@@ -572,7 +607,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
 
             gz.subscribe(Actuators, motor_topic(int(slot.ident["instance"])), on_motor)
 
-    if args.plan_diag and gz is not None:
+    if (args.plan_diag or args.record_dt > 0.0) and gz is not None:
         # 票 B2：只读。gz 世界系的真值位置，和 PX4 的 EKF 里程计对照，分清是控制没跟上还是估计偏了。
         try:
             from gz.msgs10.pose_v_pb2 import Pose_V
@@ -613,6 +648,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
             "sp": node.create_publisher(TrajectorySetpoint, topics["trajectory_setpoint"], qos),
             "cmd": node.create_publisher(VehicleCommand, topics["vehicle_command"], qos),
         }
+        if args.control_mode == "ctbr":
+            pubs[ns]["rates"] = node.create_publisher(VehicleRatesSetpoint, ns + "/fmu/in/vehicle_rates_setpoint", qos)
         node.create_subscription(VehicleOdometry, topics["vehicle_odometry"], lambda msg, box=state: on_odom(box, msg), qos)
         node.create_subscription(VehicleStatus, topics["vehicle_status"], lambda msg, box=state: box.__setitem__("status", msg), qos)
         node.create_subscription(
@@ -641,6 +678,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
 
     wall0 = time.monotonic()
     last_elapsed = None
+    last_progress = -1e9
     physics_dt = float(session.slots[0].bridge.cfg.physics_dt)
     failure = ""
     preflight = PreflightLatch(args.preflight_timeout)
@@ -671,7 +709,9 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                 pub = pubs[command.namespace]
                 if mode is not None:
                     pub["ocm"].publish(_fill(OffboardControlMode(), mode))
-                if setpoint is not None:
+                if command.rates_setpoint is not None:
+                    pub["rates"].publish(_fill(VehicleRatesSetpoint(), command.rates_setpoint))
+                elif setpoint is not None:
                     pub["sp"].publish(_fill(TrajectorySetpoint(), setpoint))
             stop.wait(SETPOINT_PERIOD_S)
 
@@ -735,6 +775,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                 {ns: (None if box is None else float(box.odometry.timestamp) * 1e-6) for ns, box in boxes.items()},
             )
             sim_skew.note(t_sim, odom_recv())
+            if args.control_mode == "ctbr":
+                calibrate_hover_thrust(session)
             commands = session.step(float(elapsed), boxes)
             last_elapsed = float(elapsed)
             if args.agent_delay_s > 0.0:
@@ -744,14 +786,41 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                 for fields in command.vehicle_commands:
                     pub["cmd"].publish(_fill(VehicleCommand(), fields))
                 tracked = None
-                if getattr(command, "phase", "") == "PLAN":
+                if command.rates_setpoint is None and getattr(command, "phase", "") == "PLAN":
                     tracked = session.stream_local_setpoint(command.namespace, float(elapsed))
                 mode, setpoint = streamed_setpoint(command, tracked)
                 if mode is not None:
                     pub["ocm"].publish(_fill(OffboardControlMode(), mode))
-                if setpoint is not None:
+                if command.rates_setpoint is not None:
+                    pub["rates"].publish(_fill(VehicleRatesSetpoint(), command.rates_setpoint))
+                elif setpoint is not None:
                     pub["sp"].publish(_fill(TrajectorySetpoint(), setpoint))
-            snapshot = session.result()
+            if args.record_dt > 0.0:
+                with truth_lock:
+                    measured = {slot.bridge.drone_id: truth[model_name(int(slot.ident["instance"]))]
+                                for slot in session.slots if model_name(int(slot.ident["instance"])) in truth}
+                    truth_meter.note(measured, {slot.bridge.drone_id: slot.phase for slot in session.slots})
+                    for slot in session.slots:
+                        samples = slot.flight_samples
+                        pose = truth.get(model_name(int(slot.ident["instance"])))
+                        if samples and pose is not None and abs(samples[-1]["t_s"] - float(elapsed)) < 1e-6:
+                            samples[-1]["truth_p"] = list(pose)
+            # Long-flight summaries contain growing telemetry arrays; do not rebuild
+            # quantiles and fleet statistics at 50 Hz merely to detect completion.
+            if args.record_dt > 0.0:
+                done = all(slot.phase == "DONE" for slot in session.slots)
+                snapshot = {"ok": done and not session.fail_reason and all(slot.arrival is not None for slot in session.slots),
+                            "terminal": bool(session.fail_reason) and session._failure_settled()}
+            else:
+                snapshot = session.result()
+            if args.record_dt > 0.0 and float(elapsed) - last_progress >= 5.0:
+                snapshot = session.result()
+                progress = {"t_s": float(elapsed), "outcome": snapshot["outcome"], "reason": snapshot["reason"],
+                            "drones": snapshot["drones"], "truth": truth_meter.summary(),
+                            "control": {key: {k: v for k, v in value.items() if k != "samples"}
+                                        for key, value in snapshot.get("flight_record", {}).items()}}
+                Path(args.out).with_name("progress.json").write_text(json.dumps(progress))
+                last_progress = float(elapsed)
             if snapshot["ok"] or snapshot.get("terminal"):
                 break
             before = {ns: state["odom_n"] for ns, state in slots.items()}
@@ -819,6 +888,16 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                     pub = pubs[command.namespace]
                     for fields in command.vehicle_commands:
                         pub["cmd"].publish(_fill(VehicleCommand(), fields))
+            if args.record_dt > 0.0:
+                with truth_lock:
+                    measured = {slot.bridge.drone_id: truth[model_name(int(slot.ident["instance"]))]
+                                for slot in session.slots if model_name(int(slot.ident["instance"])) in truth}
+                    truth_meter.note(measured, {slot.bridge.drone_id: slot.phase for slot in session.slots})
+                    for slot in session.slots:
+                        samples = slot.flight_samples
+                        pose = truth.get(model_name(int(slot.ident["instance"])))
+                        if samples and pose is not None and abs(samples[-1]["t_s"] - float(elapsed)) < 1e-6:
+                            samples[-1]["truth_p"] = list(pose)
             snapshot = session.result()
             if snapshot["ok"] or snapshot.get("terminal"):
                 break
@@ -860,7 +939,19 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         payload["deviation"] = "偏离上游：仿真钟锁步"
     else:
         payload["lockstep"] = {"enabled": False}
+    if args.control_mode == "ctbr" or args.record_dt > 0.0:
+        import hashlib
+        import subprocess
+        files = ["yopo_l0/ctbr.py", "yopo_l0/explore.py", "yopo_l0/scene.py", "yopo_l0/sensor.py",
+                 "yopo_l0/wide_scene.py", "yopo_l0/sitl_bridge.py", "yopo_l0/flight_evidence.py",
+                 "scripts/sitl/yopo_l0_live.py"]
+        payload["source"] = {"commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=_REPO,
+                                 capture_output=True, text=True).stdout.strip(),
+                             "sha256": {name: hashlib.sha256((_REPO/name).read_bytes()).hexdigest() for name in files},
+                             "scene_sha256": card.hash, "seed": args.seed}
     payload["scene_world"] = scene_world_plan(card, args)
+    if truth_meter is not None:
+        payload["truth_flight"] = truth_meter.summary()
     _write(args.out, payload)
     return outcome_exit_code(payload)
 

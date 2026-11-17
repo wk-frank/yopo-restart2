@@ -411,9 +411,31 @@ def render(
 class DepthCamera:
     def __init__(self, cfg: CameraConfig, obstacles: tuple[Obstacle, ...], rng: np.random.Generator, d435=None):
         self.cfg, self._obstacles, self._rng, self._d435 = cfg, obstacles, rng, d435
+        centres, radii, finite = [], [], []
+        for i, ob in enumerate(obstacles):
+            if isinstance(ob, Cylinder):
+                a, b = ob.axis_ends()
+                centres.append((a + b) * .5)
+                radii.append(float(np.linalg.norm(b - a)) * .5 + ob.radius)
+                finite.append(i)
+            elif isinstance(ob, Box):
+                lo, hi = np.asarray(ob.lo), np.asarray(ob.hi)
+                centres.append((lo + hi) * .5)
+                radii.append(float(np.linalg.norm(hi - lo)) * .5)
+                finite.append(i)
+        self._cull_centres = np.asarray(centres, dtype=float).reshape(-1,3)
+        self._cull_radii = np.asarray(radii, dtype=float)
+        self._cull_indices = np.asarray(finite, dtype=int)
+        self._cull_infinite = tuple(ob for ob in obstacles if isinstance(ob, Ground))
 
     def capture(self, position: np.ndarray, yaw: float, stamp: float) -> DepthFrame:
         c, s = np.cos(yaw), np.sin(yaw)
         R_wb = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
         cam_pos = np.asarray(position) + R_wb @ np.asarray(self.cfg.mount_xyz_body)
-        return render(self._obstacles, self.cfg, cam_pos, R_wb @ R_BODY_CAM, self._rng, stamp, self._d435)
+        obstacles = self._obstacles
+        if os.environ.get("YOPO_SENSOR_SPATIAL", "0") == "1":
+            reach = self.cfg.max_range_m * math.sqrt(1.0 + math.tan(math.radians(self.cfg.hfov_deg/2))**2
+                                                    + math.tan(math.radians(self.cfg.vfov_deg/2))**2)
+            mask = np.linalg.norm(self._cull_centres - cam_pos, axis=1) <= reach + self._cull_radii + 1e-6
+            obstacles = self._cull_infinite + tuple(self._obstacles[i] for i in self._cull_indices[mask])
+        return render(obstacles, self.cfg, cam_pos, R_wb @ R_BODY_CAM, self._rng, stamp, self._d435)

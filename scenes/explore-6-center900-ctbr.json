@@ -1,0 +1,132 @@
+{
+  "name": "explore-6-center900-ctbr",
+  "note": "Report-only: elastic six-drone common-heading exploration from map centre. Every vehicle must attain horizontal displacement >=900 m; obstacles cover all 3025 tiles including behind launch. No route clearing. PX4 parameters unchanged.",
+  "ground_z": 0.0,
+  "drones": [
+    {
+      "id": "uav0",
+      "start_enu": [
+        0.0,
+        -12.5,
+        2.5
+      ]
+    },
+    {
+      "id": "uav1",
+      "start_enu": [
+        0.0,
+        -7.5,
+        2.5
+      ]
+    },
+    {
+      "id": "uav2",
+      "start_enu": [
+        0.0,
+        -2.5,
+        2.5
+      ]
+    },
+    {
+      "id": "uav3",
+      "start_enu": [
+        0.0,
+        2.5,
+        2.5
+      ]
+    },
+    {
+      "id": "uav4",
+      "start_enu": [
+        0.0,
+        7.5,
+        2.5
+      ]
+    },
+    {
+      "id": "uav5",
+      "start_enu": [
+        0.0,
+        12.5,
+        2.5
+      ]
+    }
+  ],
+  "task": {
+    "type": "explore",
+    "duration_s": 420.0,
+    "velocity_mps": 5.0,
+    "replan_hz": 10.0,
+    "x_goal_m": 940.0,
+    "x_finish_m": 920.0,
+    "z_goal_m": 2.5,
+    "y_bounds_m": [
+      -40.0,
+      40.0
+    ],
+    "z_bounds_m": [
+      1.2,
+      4.5
+    ],
+    "obstacle_x_span_m": [
+      18.0,
+      1100.0
+    ],
+    "arrive_radius_m": 5.0,
+    "lookahead_m": 10.0,
+    "clearance_margin_m": 1.0,
+    "peer_margin_m": 2.0,
+    "odom_replan_err_m": 0.5,
+    "cohesion": {
+      "max_progress_span_m": 25.0,
+      "lateral_gain": 0.12
+    }
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.6,
+    "goal_speed_mps": 0.3,
+    "goal_hold_s": 1.0,
+    "frozen": false,
+    "min_horizontal_displacement_m": 900.0
+  },
+  "camera": {
+    "width": 160,
+    "height": 96,
+    "hfov_deg": 90.0,
+    "vfov_deg": 60.0,
+    "min_range_m": 0.2,
+    "max_range_m": 20.0,
+    "noise_std_m": 0.02,
+    "mount_xyz_body": [
+      0.13,
+      0.0,
+      0.02
+    ]
+  },
+  "dynamics": {
+    "model": "point_mass_lag",
+    "tau_s": 0.1,
+    "kp": 4.5,
+    "kd": 3.2,
+    "a_max": 6.0
+  },
+  "rates_hz": {
+    "physics": 100,
+    "camera": 30,
+    "planner": 15
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "wide_field": {
+    "half_extent_m": 1100.0,
+    "tile_m": 40.0,
+    "launch_clear_radius_m": 18.0,
+    "seed": 19
+  }
+}

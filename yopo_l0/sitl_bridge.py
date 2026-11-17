@@ -1008,6 +1008,7 @@ def decode_vehicle_odometry(msg, now_s: float | None = None) -> dict:
         "velocity_enu": np.asarray(enu.velocity, dtype=float).copy(),
         "acceleration_enu": acceleration_enu.copy(),
         "yaw_enu": float(yaw),
+        "rotation_enu_flu": np.asarray(enu.R_wb, dtype=float).copy(),
         "timestamp_us": timestamp_us,
         "position_ned": position.copy(),
         "velocity_ned": velocity.copy(),
@@ -1369,6 +1370,7 @@ class LiveCommand:
     depth_source: str
     roundtrip_error_m: float
     position_enu: tuple | None
+    rates_setpoint: dict | None = None
 
 
 @dataclass
@@ -1402,9 +1404,15 @@ class LiveFleetConfig:
     # 等于从代理侧把 PX4 位置环、速度环增益抬高（不写 PX4 参数）。打开即偏离上游。
     setpoint_gain_p: float = 0.0
     setpoint_gain_v: float = 0.0
+    control_mode: str = "pva"
+    record_dt_s: float = 0.0
 
     def __post_init__(self) -> None:
         self.positioning = normalize_positioning(self.positioning)
+        if self.control_mode not in ("pva", "ctbr"):
+            raise ValueError("control_mode must be pva or ctbr")
+        if not math.isfinite(self.record_dt_s) or self.record_dt_s < 0.0:
+            raise ValueError("record_dt_s must be finite and nonnegative")
         if not (0.0 <= float(self.setpoint_lead_s) <= 0.5):
             raise ValueError(f"setpoint_lead_s 要在 [0, 0.5]，收到 {self.setpoint_lead_s}")
         for name in ("setpoint_gain_p", "setpoint_gain_v"):
@@ -1443,6 +1451,15 @@ class _LiveSlot:
         self.formation_sampler = None
         self.takeoff_handover_s: float | None = None
         self.shadow = None
+        self.ctbr = None
+        self.ctbr_ticks = 0
+        self.ctbr_finished = False
+        self.pva_ticks = 0
+        self.ctbr_last_yaw = None
+        self.ctbr_last_t = None
+        self.flight_samples: list[dict] = []
+        self.max_horizontal_displacement_m = 0.0
+        self.hover_calibration_attempted = False
         self.fleet_frame = None  # 票 S7：crossing 最近一帧场景卡深度
 
 
@@ -1693,6 +1710,8 @@ class LiveFleetSession:
             raise ValueError("formation / crossing / switch / explore 会话要带同名 fleet，其他策略不带")
         if policy in FLEET_POLICIES and bus is None:
             raise ValueError(f"{policy} 会话要带 MessageBus")
+        if cfg.control_mode == "ctbr" and policy != "explore":
+            raise ValueError("CTBR currently requires policy=explore")
         self.card = card
         self.cfg = cfg
         self.policy = policy
@@ -1702,6 +1721,10 @@ class LiveFleetSession:
         self._plan_origin: float | None = None
         self._formation_t: float | None = None
         self.slots = [_LiveSlot(bridge, ident, cfg.initial_phase) for bridge, ident in zip(bridges, idents)]
+        if cfg.control_mode == "ctbr":
+            from .ctbr import FlatnessCTBRController
+            for slot in self.slots:
+                slot.ctbr = FlatnessCTBRController()
         self.goal_tol, self.goal_speed, self.goal_hold, self.body = _goal_limits(card)
         self.fail_reason = ""
         self.px4_parameters_written: list = []
@@ -1749,6 +1772,13 @@ class LiveFleetSession:
             except ValueError:
                 decoded[ns] = None
         self._decoded = decoded
+        if self.cfg.control_mode == "ctbr":
+            ground = self.card.card.get("ground_z")
+            for slot in self.slots:
+                state = decoded.get(slot.ident["namespace"])
+                if (slot.phase == "PLAN" and ground is not None and state is not None
+                        and state["position_enu"][2] <= float(ground) + self.body):
+                    self._fail(f"{slot.bridge.drone_id}:GROUND_COLLISION", now_s)
         self._exchange(decoded)
         self._note_separation(decoded, now_s)
         self._formation_exchange(now_s)
@@ -1981,11 +2011,56 @@ class LiveFleetSession:
         roundtrip: float,
         position,
     ) -> LiveCommand:
+        rates = None
+        if (slot.ctbr is not None and self.fleet is not None and slot.position is not None
+                and slot.velocity is not None and self.fleet.terminal_locked(slot.bridge.drone_id)
+                and np.linalg.norm(slot.position - slot.bridge.goal) <= self.goal_tol
+                and np.linalg.norm(slot.velocity) <= self.goal_speed):
+            slot.ctbr_finished = True
+        terminal_hold = slot.ctbr_finished
+        state = self._decoded.get(slot.ident["namespace"])
+        if (slot.ctbr is not None and slot.phase == "PLAN" and setpoint is not None
+                and slot.formation_sampler is not None and state is not None and not terminal_hold):
+            from .ctbr import GRAVITY
+            p, v, a = [np.asarray(px4.ned_to_enu(setpoint[key]), dtype=float)
+                       for key in ("position", "velocity", "acceleration")]
+            sampler = slot.formation_sampler
+            t = float(now_s) - float(self._plan_origin)
+            traj = sampler.traj
+            jerk = (np.asarray(traj.evaluate(t, 3), dtype=float)
+                    if traj.t_start <= t <= traj.t_end else np.zeros(3))
+            yaw = float(sampler.yaw)
+            dt = 0.0 if slot.ctbr_last_t is None else now_s - slot.ctbr_last_t
+            yaw_rate = (math.atan2(math.sin(yaw - slot.ctbr_last_yaw), math.cos(yaw - slot.ctbr_last_yaw)) / dt
+                        if dt > 1e-6 and slot.ctbr_last_yaw is not None else 0.0)
+            control = slot.ctbr.command(p, v, a, jerk, yaw, yaw_rate,
+                                       state["position_enu"], state["velocity_enu"], state["rotation_enu_flu"])
+            rates = control.fields(now_s)
+            slot.ctbr_last_yaw, slot.ctbr_last_t = yaw, now_s
+            slot.ctbr_ticks += 1
+        else:
+            slot.pva_ticks += int(setpoint is not None)
+            slot.ctbr_last_t = None
+        if position is not None:
+            displacement = float(np.linalg.norm(np.asarray(position)[:2] - slot.bridge.start_enu[:2]))
+            slot.max_horizontal_displacement_m = max(slot.max_horizontal_displacement_m, displacement)
+        if self.cfg.record_dt_s > 0.0 and position is not None:
+            if not slot.flight_samples or now_s - slot.flight_samples[-1]["t_s"] >= self.cfg.record_dt_s - 1e-9:
+                slot.flight_samples.append({"t_s": float(now_s), "phase": slot.phase,
+                    "p": _vec_list(position), "v": None if slot.velocity is None else _vec_list(slot.velocity),
+                    "yaw": float(slot.yaw), "control": "ctbr" if rates is not None else "pva",
+                    "ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["position"])),
+                    "rates": rates,
+                    "body_up": None if state is None else _vec_list(state["rotation_enu_flu"][:, 2]),
+                    "a_ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["acceleration"]))})
         self._record_trace(slot, now_s, position, setpoint)
         setpoint = setpoint_to_local(setpoint, slot.offset_enu)
         if slot.trace and slot.trace[-1].get("t_s") == float(now_s) and setpoint is not None:
             slot.trace[-1]["setpoint_local_ned"] = _vec_list(setpoint["position"]) if setpoint.get("position") is not None else None
         offboard = None if setpoint is None else px4.offboard_control_mode(setpoint["timestamp"])
+        if rates is not None:
+            offboard = dict(offboard, position=False, velocity=False, acceleration=False,
+                            attitude=False, body_rate=True)
         if position is not None:
             self.max_roundtrip_m = max(self.max_roundtrip_m, float(roundtrip))
         for command in commands:
@@ -2006,6 +2081,7 @@ class LiveFleetSession:
             depth_source=depth_source,
             roundtrip_error_m=float(roundtrip),
             position_enu=pos,
+            rates_setpoint=rates,
         )
 
     def _hold(self, position, yaw: float, now_s: float) -> tuple[dict, float]:
@@ -2394,6 +2470,15 @@ class LiveFleetSession:
             }
             if self._explore_telemetry is not None:
                 payload["explore_sitl"] = self._explore_telemetry.summary(self.slots, self.fleet)
+        if self.cfg.control_mode != "pva" or self.cfg.record_dt_s > 0.0:
+            payload["control_mode"] = self.cfg.control_mode
+            payload["flight_record"] = {
+                slot.bridge.drone_id: {"samples": slot.flight_samples,
+                    "ctbr_ticks": slot.ctbr_ticks, "pva_ticks": slot.pva_ticks,
+                    "max_horizontal_displacement_m": slot.max_horizontal_displacement_m,
+                    "hover_thrust": None if slot.ctbr is None else slot.ctbr.hover.value,
+                    "hover_calibration_samples": 0 if slot.ctbr is None else slot.ctbr.hover.samples}
+                for slot in self.slots}
         payload["shadow"] = bool(self.shadow)
         payload["shadow_reject_rate"] = None
         payload["shadow_reject_histogram"] = None
@@ -2735,6 +2820,11 @@ def build_scene_world_sdf(
     world_el = root.find("world")
     if world_el is None:
         raise ValueError("基础 SDF 缺少 <world> 节点")
+    if isinstance(card.card.get("wide_field"), dict):
+        size = 2.0 * float(card.card["wide_field"]["half_extent_m"]) + 200.0
+        for plane_size in world_el.findall(".//geometry/plane/size"):
+            plane_size.text = f"{size:g} {size:g}"
+        template = ET.tostring(root, encoding="unicode")
     actual_world = world_el.attrib.get("name", "")
     if world_name and actual_world != world_name:
         raise ValueError(f"基础 SDF world name={actual_world!r} 与期望 {world_name!r} 不一致")

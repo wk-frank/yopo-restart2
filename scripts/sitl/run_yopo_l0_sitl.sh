@@ -16,6 +16,8 @@ SCENE=""
 N="1"
 POSITIONING="${YOPO_POSITIONING:-default}"
 POLICY="${YOPO_L0_POLICY:-upstream}"
+CONTROL_MODE="${YOPO_CONTROL_MODE:-pva}"
+RECORD_DT="${YOPO_RECORD_DT:-0}"
 SEED="0"
 DRY=0
 IMAGE_ARG=""
@@ -30,7 +32,7 @@ SHADOW_TRACKING_ALIGN="${YOPO_SHADOW_TRACKING_ALIGN:-0}"
 SCENE_WORLD="${YOPO_SITL_SCENE_WORLD:-0}"
 EXPLORE_VELOCITY_MPS="${YOPO_EXPLORE_VELOCITY_MPS:-}"
 usage() {
-  echo "用法：$0 [--scene 场景卡] [--n 1|2|3|6] [--policy upstream|formation|crossing|switch|explore] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--scene-world] [--velocity-mps 米每秒] [--dry-run]"
+  echo "用法：$0 [--scene 场景卡] [--n 1|2|3|6] [--policy upstream|formation|crossing|switch|explore] [--positioning default|rtk] [--seed N] [--image 镜像] [--lockstep] [--agent-delay-s 秒] [--shadow-env-evidence] [--fleet-shadow] [--shadow-contract-align] [--shadow-tracking-align] [--scene-world] [--velocity-mps 米每秒] [--control-mode pva|ctbr] [--record-dt 秒] [--dry-run]"
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -42,6 +44,8 @@ while [[ $# -gt 0 ]]; do
     --positioning=*) POSITIONING="${1#*=}"; shift ;;
     --policy) POLICY="${2:-}"; shift 2 ;;
     --policy=*) POLICY="${1#*=}"; shift ;;
+    --control-mode) CONTROL_MODE="${2:-}"; shift 2 ;;
+    --record-dt) RECORD_DT="${2:-}"; shift 2 ;;
     --seed) SEED="${2:-}"; shift 2 ;;
     --seed=*) SEED="${1#*=}"; shift ;;
     --image)
@@ -86,6 +90,13 @@ case "$POLICY" in
   exit 2
   ;;
 esac
+case "$CONTROL_MODE" in
+  pva|ctbr) ;;
+  *) echo "--control-mode must be pva or ctbr" >&2; exit 2 ;;
+esac
+if [[ "$CONTROL_MODE" == "ctbr" && "$LOCKSTEP" != "1" ]]; then
+  echo "CTBR requires --lockstep" >&2; exit 2
+fi
 case "$LOCKSTEP" in
   0|1) ;;
   *) echo "未知 YOPO_SITL_LOCKSTEP=$LOCKSTEP（只要 0 或 1）" >&2; exit 2 ;;
@@ -174,6 +185,7 @@ if [[ "$DRY" == "1" ]]; then
   if [[ -n "$EXPLORE_VELOCITY_MPS" ]]; then
     printf 'velocity_mps=%s\n' "$EXPLORE_VELOCITY_MPS"
   fi
+  if [[ "$CONTROL_MODE" != "pva" ]]; then printf "control_mode=%s\n" "$CONTROL_MODE"; fi
   exit 0
 fi
 python3 "$SITL_DIR/fleet.py" layout --n "$N" --format json >/dev/null
@@ -234,7 +246,8 @@ if "${DOCKER[@]}" ps -q -f "name=^${NAME}$" | grep -q .; then
   set +e
   "${DOCKER[@]}" exec \
     -e YOPO_SITL_N="$N" -e YOPO_SITL_PLANNER=yopo-l0 -e YOPO_L0_SCENE="$SCENE" \
-    -e YOPO_L0_POLICY="$POLICY" \
+    -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
+    -e YOPO_L0_POLICY="$POLICY" -e YOPO_CONTROL_MODE="$CONTROL_MODE" -e YOPO_RECORD_DT="$RECORD_DT" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
     -e YOPO_L0_SEED="$SEED" -e YOPO_POSITIONING="$POSITIONING" \
     -e YOPO_SITL_LOCKSTEP="$LOCKSTEP" -e YOPO_AGENT_DELAY_S="$AGENT_DELAY_S" \
     -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \
@@ -273,6 +286,8 @@ set +e
 "${DOCKER[@]}" run --rm --name "$NAME" "${net_args[@]}" \
   -e ROS_DOMAIN_ID=0 -e YOPO_SITL_N="$N" -e YOPO_SITL_MISSION=1 \
   -e YOPO_SITL_PLANNER=yopo-l0 -e YOPO_L0_SCENE="$SCENE" -e YOPO_L0_POLICY="$POLICY" \
+  -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
+  -e YOPO_CONTROL_MODE="$CONTROL_MODE" -e YOPO_RECORD_DT="$RECORD_DT" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
   -e YOPO_L0_SEED="$SEED" \
   -e YOPO_SITL_LOCKSTEP="$LOCKSTEP" -e YOPO_AGENT_DELAY_S="$AGENT_DELAY_S" \
   -e YOPO_SHADOW_ENV_EVIDENCE="$SHADOW_ENV_EVIDENCE" -e YOPO_FLEET_SHADOW="$FLEET_SHADOW" \

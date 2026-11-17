@@ -22,6 +22,7 @@
 | b8-fallback-floor.md | b8 | 票 B8：柱净空门全拒退路地板与起步斜坡组合（只报数） | report-only、冻结 |
 | bat1-lockstep-battery-runs.json |  | 票 BAT1：锁步电池 unhealthy（不改 BAT_ 参数，只诊断） | report-only |
 | bat1-lockstep-battery.md |  | 票 BAT1：锁步电池 unhealthy（不改 `BAT_` 参数，只诊断） | report-only |
+| ctbr-center900.md |  | CTBR-CENTER900：中心起飞、全域障碍与六机长程探索 | report-only、冻结 |
 | ctbr-flatness-ticket.md |  | 票 CTBR-1：微分平坦 CTBR（集体推力 + 机体角速率 `VehicleRatesSetpoint`）接缝与验收规范 | report-only |
 | d1-geometric-fallback.md | d1 | 票 D1：提交前的一次性几何回退 | report-only、冻结 |
 | d2-teacher-batch.json | d2 | （无说明字段） | 无 |
