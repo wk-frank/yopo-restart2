@@ -9,7 +9,7 @@ import functools
 
 import numpy as np
 from yopo_swarm_core import baseline as B
-from yopo_swarm_core.depth import network_depth
+from .depth_accel import network_depth
 from yopo_swarm_core.infer_ipc import body_obs
 
 

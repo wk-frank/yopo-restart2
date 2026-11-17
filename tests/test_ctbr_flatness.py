@@ -70,7 +70,7 @@ def test_ctbr_requires_known_mode_and_supported_policy():
         make_live_session(card,live=LiveFleetConfig(control_mode='ctbr'))
 
 
-def test_ctbr_does_not_switch_to_pva_at_start_of_terminal_braking():
+def test_terminal_pva_handover_is_latched_across_replanning():
     card=load_card(ROOT/'scenes/explore-6-open-sitl80.json')
     session=make_live_session(card,policy='explore',live=LiveFleetConfig(initial_phase='PLAN',control_mode='ctbr'))
     vehicles=[FakePx4Vehicle(d['start_enu']) for d in card.card['drones']]
@@ -83,5 +83,12 @@ def test_ctbr_does_not_switch_to_pva_at_start_of_terminal_braking():
     slot.position=np.array([15.,-7.5,1.5]);slot.velocity=np.array([5.,0.,0.])
     cmd=session._pack(slot,.02,heartbeat=True,setpoint=session._last_cmds[0].setpoint,
                       commands=[],planned=True,depth_source='scene-card',roundtrip=0.,position=slot.position)
-    assert cmd.rates_setpoint is not None
-    assert not slot.ctbr_finished
+    assert cmd.rates_setpoint is None
+    assert slot.ctbr_finished
+    assert not cmd.offboard['body_rate']
+    # An ordinary plan code on a later tick must not re-enable CTBR.
+    session.fleet._terminal_goal[session.slots[0].bridge.drone_id] = None
+    cmd=session._pack(session.slots[0],.04,heartbeat=True,setpoint=session._last_cmds[0].setpoint,
+                      commands=[],planned=True,depth_source='scene-card',roundtrip=0.,position=session.slots[0].position)
+    assert cmd.rates_setpoint is None
+    assert not cmd.offboard['body_rate']

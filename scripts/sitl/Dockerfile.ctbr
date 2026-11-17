@@ -1,0 +1,4 @@
+# Optional CTBR validation runtime. Builds on the existing PX4/ROS image; no PX4 rebuild.
+ARG BASE_IMAGE=yopo-restart-sitl:yopo-81d084c04186
+FROM ${BASE_IMAGE}
+RUN pip3 install --no-cache-dir --no-deps opencv-python-headless==4.10.0.84

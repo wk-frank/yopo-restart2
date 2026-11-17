@@ -942,9 +942,10 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
     if args.control_mode == "ctbr" or args.record_dt > 0.0:
         import hashlib
         import subprocess
-        files = ["yopo_l0/ctbr.py", "yopo_l0/explore.py", "yopo_l0/scene.py", "yopo_l0/sensor.py",
+        files = ["yopo_l0/net.py", "yopo_l0/depth_accel.py", "yopo_l0/ctbr.py", "yopo_l0/explore.py", "yopo_l0/scene.py", "yopo_l0/sensor.py",
                  "yopo_l0/wide_scene.py", "yopo_l0/sitl_bridge.py", "yopo_l0/flight_evidence.py",
                  "scripts/sitl/yopo_l0_live.py"]
+        payload["network_depth_backend"] = os.environ.get("YOPO_DEPTH_BACKEND", "core")
         payload["source"] = {"commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=_REPO,
                                  capture_output=True, text=True).stdout.strip(),
                              "sha256": {name: hashlib.sha256((_REPO/name).read_bytes()).hexdigest() for name in files},

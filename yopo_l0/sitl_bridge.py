@@ -2012,10 +2012,11 @@ class LiveFleetSession:
         position,
     ) -> LiveCommand:
         rates = None
-        if (slot.ctbr is not None and self.fleet is not None and slot.position is not None
-                and slot.velocity is not None and self.fleet.terminal_locked(slot.bridge.drone_id)
-                and np.linalg.norm(slot.position - slot.bridge.goal) <= self.goal_tol
-                and np.linalg.norm(slot.velocity) <= self.goal_speed):
+        # A terminal goal marks the start of PVA convergence, not just a new
+        # short polynomial. Latch this handover so replanning cannot switch the
+        # vehicle back into rates control while it is braking/holding.
+        if (slot.ctbr is not None and self.fleet is not None
+                and self.fleet.terminal_locked(slot.bridge.drone_id)):
             slot.ctbr_finished = True
         terminal_hold = slot.ctbr_finished
         state = self._decoded.get(slot.ident["namespace"])
