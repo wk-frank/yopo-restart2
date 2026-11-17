@@ -10,6 +10,7 @@ class DepthLocalField:
         self.frames=[]
         self.tree=None
         self.stamp=None
+        self.surfaces=[]
 
     def observe(self, frame, position, rotation):
         if self.stamp is not None and abs(self.stamp-frame.stamp)<1e-6:
@@ -25,8 +26,15 @@ class DepthLocalField:
         points=(rays[valid]*d[valid,None])@R.T+origin
         self.frames.append((frame.stamp,origin,R,frame.K,d))
         self.frames=[f for f in self.frames if frame.stamp-f[0]<2.0][-8:]
-        # Current surfaces avoid odometry drift accumulation; free-space views retain a short history.
-        self.tree=cKDTree(points) if len(points) else None
+        self.surfaces.append(points)
+        self.surfaces=self.surfaces[-8:]
+        # Retain recently observed surfaces when they move behind the camera.
+        cloud=np.concatenate(self.surfaces)
+        if len(cloud):
+            _,ids=np.unique(np.floor(cloud/.12).astype(np.int32),axis=0,return_index=True)
+            self.tree=cKDTree(cloud[ids])
+        else:
+            self.tree=None
 
     def min_distance(self, pts):
         pts=np.asarray(pts).reshape(-1,3)

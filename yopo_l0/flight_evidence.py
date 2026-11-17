@@ -83,4 +83,9 @@ def acceptance(result, card):
             and video.get('ffmpeg_exit_code')==0 and video.get('errors')==[]
             and span>=0.90*float(result.get('sim_s',0.))
             and video.get('frames',0)>=0.90*10.*span and bool(video.get('mp4_sha256')))
+    if (card.card.get('task') or {}).get('depth_only',False):
+        contract=result.get('perception_contract',{})
+        checks['no_prior_map_planning']=(contract.get('mode')=='depth-only' and contract.get('planning_geometry_count')==0
+            and contract.get('scene_geometry_abort_enabled') is False)
+        checks['four_times_obstacle_count']=len(card.card['geometry']['cylinders'])==12100
     return {'passed':all(checks.values()),'required_per_vehicle_horizontal_displacement_m':target,'checks':checks}

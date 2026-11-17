@@ -819,7 +819,7 @@ class ExploreFleet:
             candidates.sort(key=lambda item: item[0])
             chosen = candidates[0][1]
         else:
-            chosen = np.array([pref_x, pref_y, self.z_goal], dtype=float)
+            chosen = p.copy() if self.depth_only else np.array([pref_x, pref_y, self.z_goal], dtype=float)
         self._terminal_goal[did] = chosen
         return chosen
 
