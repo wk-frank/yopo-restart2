@@ -81,6 +81,7 @@ frank 拍板卡片未回；父代理代定（仅 L0，L1 不动）：
 | CLOSEOUT | 收口刷新 M0–M4 结果总表、交付视频索引、已知限制与研究目录索引 | S-RFLYSIM, B8, E-PG5, S8 | done（本票） |
 | EXPLORE | 无编队水平横排起飞 `ExploreFleet`（`policy=explore`）：无进度门控、无轮转、无槽位回拉，TJU 时间相似律 ratio=1.7，6 机密林 9.67 m/s，只报数 | CLOSEOUT | done（合入 `bdfbdfebcd0b`，见 [explore-free-swarm.md](research/explore-free-swarm.md)） |
 | EXPLORE-SITL | `explore` 接入锁步 PX4 + Gazebo SITL（不写 PX4 参数），六机林带 4/5、三机柱林 3/3，只报数 | EXPLORE, S8 | done（合入 `992f7e4dafaf`，见 [explore-sitl.md](research/explore-sitl.md)） |
+| CTBR-1 | 微分平坦 CTBR（集体推力 + 机体角速率 `VehicleRatesSetpoint`）接入锁步 PX4 SITL（`--control-mode ctbr`，默认关，不写 PX4 参数），只报数 | EXPLORE-SITL | todo（立项与接缝规范见 [ctbr-flatness-ticket.md](research/ctbr-flatness-ticket.md)） |
 
 12：交付包收口。12a README 一键命令（#33，`78f63bcdb9bc`）；12b 结果总表（#36，`252bae86781e`）；12c 视频索引（#35，`cf9c0b0b9832`）；12d 已知限制（#34，`7a545ac3a645`）；12e 上游策略 vs 影子盾（#37，`0bb043cae739`）；12f 本票：README 顶部增加交付包入口，并核验所有表格带层级和 commit。干净检出复现由 12a 的 `tests/test_demo.py` 覆盖。
 
