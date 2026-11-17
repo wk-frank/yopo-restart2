@@ -1,6 +1,6 @@
 # 票 CTBR-1：微分平坦 CTBR（集体推力 + 机体角速率 `VehicleRatesSetpoint`）接缝与验收规范
 
-状态：`todo`（仅立项与接缝规范，本票不合入控制器实现代码；后续实验属 `report-only` / 只报数，判据未冻结）。
+状态：`in-progress`。已新增显式 CTBR 实现与六机大场景链路，进展见 [中心向外长程报告](ctbr-center900.md)；本票原定的三机/六机 seeds 0..4 速度与误差对照仍待做。实验属 `report-only` / 只报数，判据未冻结。
 
 ## 1. 问题背景与定量动机（L0 敏捷上限 vs PX4 位置/速度外环相位滞后）
 
@@ -32,8 +32,15 @@
 2. **期望机体姿态阵 $R_d \in \mathrm{SO}(3)$（世界 ENU 下机体 FLU 轴系）：**
    $$b_{3d} = \frac{a_{\text{des}}}{\|a_{\text{des}}\|}, \quad b_{1c} = [\cos\psi_d,\,\sin\psi_d,\,0]^\top, \quad b_{2d} = \frac{b_{3d} \times b_{1c}}{\|b_{3d} \times b_{1c}\|}, \quad b_{1d} = b_{2d} \times b_{3d}, \quad R_d = [b_{1d}\;\; b_{2d}\;\; b_{3d}]$$
    当 $\|b_{3d} \times b_{1c}\| < 10^{-3}$ 时退化到上一拍连续水平参考轴，避免奇异翻转。
-3. **由加加速度 $j_d$ 与 $\dot{\psi}_d$ 解析求取前馈机体角速率 $\omega_{\text{ff}}$（FLU）：**
-   $$h_\omega = \frac{1}{\|a_{\text{des}}\|}\Bigl(j_d - (b_{3d}^\top j_d)\,b_{3d}\Bigr), \quad \omega_{x,\text{ff}} = -b_{2d}^\top h_\omega, \quad \omega_{y,\text{ff}} = b_{1d}^\top h_\omega, \quad \omega_{z,\text{ff}} = \dot{\psi}_d\,(e_3^\top b_{3d})$$
+3. **由加加速度与偏航角速度求取完整标称姿态导数：**
+   对标称平坦参考 $F=a_d+g e_3$，令 $c=[\cos\psi_d,\sin\psi_d,0]^\top$，采用
+   $$\dot b_{3d}=\frac{(I-b_{3d}b_{3d}^\top)j_d}{\|F\|},\quad
+   \dot c=\dot\psi_d[-\sin\psi_d,\cos\psi_d,0]^\top,$$
+   $$u=b_{3d}\times c,\quad \dot u=\dot b_{3d}\times c+b_{3d}\times\dot c,\quad
+   \dot b_{2d}=\frac{(I-b_{2d}b_{2d}^\top)\dot u}{\|u\|},$$
+   $$\dot b_{1d}=\dot b_{2d}\times b_{3d}+b_{2d}\times\dot b_{3d},\quad
+   \omega_{\mathrm{ff}}=(R_d^\top[\dot b_{1d}\;\dot b_{2d}\;\dot b_{3d}])^\vee.$$
+   原先的偏航简式 $\dot\psi_d(e_3^\top b_{3d})$ 忽略倾斜与航向耦合，不能满足本票非零 jerk/偏航速率的微分验收。实现已改用完整导数。反馈修正或饱和时，$j_d$ 不是修正后力向量的完整导数；当前控制器对前馈限幅，相关高动态性能仍待同种子验证。
 4. **$\mathrm{SO}(3)$ 姿态误差反馈与 FLU → PX4 FRD 符号映射：**
    设当前里程计姿态矩阵为 $R \in \mathrm{SO}(3)$（FLU 相对 ENU），机体系总指令角速率与 FRD 转换：
    $$e_R = \frac{1}{2}(R_d^\top R - R^\top R_d)^\vee, \quad \omega_{\text{flu}} = R^\top R_d\,\omega_{\text{ff}} - K_R\,e_R$$

@@ -49,10 +49,17 @@ def acceptance(result, card):
     records=result.get('flight_record',{})
     truth=result.get('truth_flight',{})
     ids=[d['id'] for d in card.card['drones']]
+    def ctbr_distance(did):
+        start=np.asarray(next(d['start_enu'] for d in card.card['drones'] if d['id']==did),dtype=float)
+        return any(s.get('control')=='ctbr' and s.get('truth_p') is not None
+                   and np.linalg.norm(np.asarray(s['p'])[:2]-start[:2])>=target
+                   and np.linalg.norm(np.asarray(s['truth_p'])[:2]-start[:2])>=target
+                   for s in records.get(did,{}).get('samples',[]))
     checks={
         'px4_sitl_success':result.get('ok') is True and result.get('adapter')=='px4-ros' and result.get('fake_px4') is False,
         'six_arrived':len(ids)==6 and result.get('arrived')==6,
         'ctbr_used_by_every_vehicle':result.get('control_mode')=='ctbr' and all(records.get(k,{}).get('ctbr_ticks',0)>0 for k in ids),
+        'per_vehicle_ctbr_distance':all(ctbr_distance(k) for k in ids),
         'no_px4_parameter_writes':result.get('px4_parameters_written')==[],
         'all_world_obstacles_present':result.get('scene_world',{}).get('n_cylinders')==len(card.card['geometry']['cylinders']),
         'per_vehicle_odometry_900m':all(records.get(k,{}).get('max_horizontal_displacement_m',0.)>=target for k in ids),

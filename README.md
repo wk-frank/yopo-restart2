@@ -19,6 +19,20 @@ scripts/demo.sh     # 产物在 out/demo/
 - [已知限制](docs/LIMITATIONS.md)：说明 L0 是假动力学、所有偏离上游的构造，以及继续只报数的清单。
 - [上游策略 vs 影子盾](docs/results/12e-upstream-vs-shield.md)：同一 commit 上上游策略与影子盾、certified 硬门的对照；影子盾只记录、不改动作。
 
+## CTBR 六机大场景（report-only）
+
+[中心向外长程报告](docs/research/ctbr-center900.md)：2.2 km × 2.2 km、3025 处障碍，每机水平位移要求至少 900 m。显式启用 CTBR，实际 PX4/Gazebo 锁步 SITL，保留真值与控制记录；原同种子高速性能对照仍待做。
+
+```bash
+docker build --pull=false -t yopo-restart-sitl:ctbr-opencv-4.10 -f scripts/sitl/Dockerfile.ctbr scripts/sitl
+YOPO_SITL_DOCKER_NETWORK=bridge YOPO_SITL_WALL_TIMEOUT=7200 \
+YOPO_DEPTH_BACKEND=opencv YOPO_SENSOR_SPATIAL=1 YOPO_SENSOR_ACCEL=1 \
+flock /tmp/yopo-sitl.lock scripts/sitl/run_yopo_l0_sitl.sh \
+  --image yopo-restart-sitl:ctbr-opencv-4.10 \
+  --scene scenes/explore-6-center900-ctbr.json --n 6 --policy explore \
+  --lockstep --scene-world --control-mode ctbr --record-dt 0.2 --seed 0
+```
+
 ## L0（box CPU，无界面，锁步确定性）
 
 ```bash

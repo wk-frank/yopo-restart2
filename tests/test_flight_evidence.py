@@ -12,7 +12,13 @@ def test_acceptance_requires_every_vehicle_and_both_measured_distance_sources():
             'flight_record':{k:{'ctbr_ticks':100,'max_horizontal_displacement_m':940.} for k in ids},
             'truth_flight':{'max_horizontal_displacement_m':{k:940. for k in ids},
                 'collision_samples':0,'samples':{k:100 for k in ids},'missing_plan_samples':{k:0 for k in ids}}}
+    for d in card.card['drones']:
+        point=[940.,d['start_enu'][1],2.5]
+        result['flight_record'][d['id']]['samples']=[{'control':'ctbr','p':point,'truth_p':point}]
     assert acceptance(result,card)['passed']
+    result['flight_record']['uav5']['samples'][0]['control']='pva'
+    assert not acceptance(result,card)['passed']
+    result['flight_record']['uav5']['samples'][0]['control']='ctbr'
     result['truth_flight']['max_horizontal_displacement_m']['uav5']=899.9
     assert not acceptance(result,card)['passed']
     result['truth_flight']['max_horizontal_displacement_m']['uav5']=940.
