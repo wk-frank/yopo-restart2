@@ -31,7 +31,10 @@ class DepthLocalField:
         # Retain recently observed surfaces when they move behind the camera.
         cloud=np.concatenate(self.surfaces)
         if len(cloud):
-            _,ids=np.unique(np.floor(cloud/.12).astype(np.int32),axis=0,return_index=True)
+            cells=np.floor(cloud/.12).astype(np.int64)
+            # Collision-free mixed-radix voxel key within the supported +/-10 km worlds.
+            keys=cells[:,0]+cells[:,1]*1_000_000+cells[:,2]*1_000_000_000_000
+            _,ids=np.unique(keys,return_index=True)
             self.tree=cKDTree(cloud[ids])
         else:
             self.tree=None
