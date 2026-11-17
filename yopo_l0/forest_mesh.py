@@ -27,11 +27,12 @@ def batch_trunk_visuals(world, directory, chunk_size=256):
                     for i in range(sides):
                         angle=2*math.pi*i/sides
                         output.write(f'v {x+radius*math.cos(angle):.6f} {y+radius*math.sin(angle):.6f} {zz:.6f}\n')
+                        output.write(f'vn {math.cos(angle):.8f} {math.sin(angle):.8f} 0\n')
                 for i in range(sides):
                     a=offset+i+1;b=offset+(i+1)%sides+1
-                    output.write(f'f {a} {b} {b+sides} {a+sides}\n')
-                output.write('f '+' '.join(str(offset+i+1) for i in reversed(range(sides)))+'\n')
-                output.write('f '+' '.join(str(offset+sides+i+1) for i in range(sides))+'\n')
+                    output.write(f'f {a}//{a} {b}//{b} {b+sides}//{b+sides} {a+sides}//{a+sides}\n')
+                output.write('f '+' '.join(f'{offset+i+1}//{offset+i+1}' for i in reversed(range(sides)))+'\n')
+                output.write('f '+' '.join(f'{offset+sides+i+1}//{offset+sides+i+1}' for i in range(sides))+'\n')
                 offset+=2*sides
         visual=ET.SubElement(link,'visual',name=f'trunk_batch_{chunk}')
         mesh=ET.SubElement(ET.SubElement(visual,'geometry'),'mesh')
