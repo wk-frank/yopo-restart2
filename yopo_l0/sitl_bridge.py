@@ -1418,7 +1418,7 @@ class LiveFleetConfig:
         for name in ("setpoint_gain_p", "setpoint_gain_v"):
             if not (0.0 <= float(getattr(self, name)) <= 5.0):
                 raise ValueError(f"{name} 要在 [0, 5]，收到 {getattr(self, name)}")
-        if self.depth_source not in ("auto", "depth", "summary", "scene-card"):
+        if self.depth_source not in ("auto", "depth", "summary", "scene-card", "gazebo"):
             raise ValueError(f"depth_source 非法：{self.depth_source!r}")
         if self.initial_phase not in ("WARMUP", "PLAN"):
             raise ValueError(f"initial_phase 只要 WARMUP 或 PLAN，收到 {self.initial_phase!r}")
@@ -1760,6 +1760,7 @@ class LiveFleetSession:
             self._wall0 = time.perf_counter()
             self._sim0 = now_s
         self._sim1 = now_s
+        self._inbox_by_ns = inbox_by_ns
         decoded: dict[str, dict | None] = {}
         for slot in self.slots:
             ns = slot.ident["namespace"]
@@ -1842,10 +1843,7 @@ class LiveFleetSession:
         self._formation_t = t
 
     def _fleet_ingest(self, now_s: float) -> None:
-        """crossing / explore 的提案要本机深度：按场景卡相机频率在里程计位姿上渲染，和 L0 一样每拍喂最新一帧。
-
-        formation / switch 没有 ingest，不进这里。深度来自场景卡几何，不依赖 Gazebo 里有没有模型。
-        """
+        """Feed external depth when explicitly selected; legacy default stays scene-card."""
         ingest = getattr(self.fleet, "ingest", None)
         if ingest is None:
             return
@@ -1863,7 +1861,20 @@ class LiveFleetSession:
             did = slot.bridge.drone_id
             last = self._last_capture.get(did)
             frame = slot.fleet_frame
-            if frame is None or last is None or now_s - last >= period - 1e-9:
+            if self.cfg.depth_source in ("depth", "gazebo"):
+                inbox = self._inbox_by_ns.get(slot.ident["namespace"])
+                external = None if inbox is None else inbox.depth
+                if external is None:
+                    self._fail(f"{did}:DEPTH_MISSING", now_s)
+                    return
+                raw = decode_depth_image(external, fallback_K=slot.bridge.camera.cfg.intrinsics)
+                if now_s - raw.stamp > 0.20 or raw.stamp > now_s + 0.025:
+                    self._fail(f"{did}:DEPTH_STALE", now_s)
+                    return
+                frame = DepthFrame(ingest_t - max(0.0, now_s - raw.stamp), raw.depth, raw.K)
+                slot.fleet_frame = frame
+                slot.depth_source = "gazebo-native-depth" if self.cfg.depth_source == "gazebo" else "ros-depth"
+            elif frame is None or last is None or now_s - last >= period - 1e-9:
                 frame = _LazyDepthFrame(
                     slot.bridge.camera, np.asarray(state["position_enu"], dtype=float), float(state["yaw_enu"]), ingest_t
                 )
@@ -1882,7 +1893,8 @@ class LiveFleetSession:
                 t=ingest_t,
             )
             ingest(did, frame, view)
-            slot.depth_source = "scene-card"
+            if self.cfg.depth_source not in ("depth", "gazebo"):
+                slot.depth_source = "scene-card"
 
     def _explore_terminal_pva(
         self, slot: _LiveSlot, p: np.ndarray, v: np.ndarray, a: np.ndarray
@@ -2254,7 +2266,7 @@ class LiveFleetSession:
             else code_now == "LOCAL_APPROVED"
         )
         self._observe_shadow(slot, now_s, state, planned=is_planned)
-        source = "scene-card" if getattr(self.fleet, "ingest", None) is not None else "formation"
+        source = (slot.depth_source if self.cfg.depth_source in ("depth", "gazebo") else "scene-card") if getattr(self.fleet, "ingest", None) is not None else "formation"
         p = np.asarray(p, dtype=float).copy()
         v = np.asarray(v, dtype=float).copy()
         a = np.asarray(a, dtype=float).copy()

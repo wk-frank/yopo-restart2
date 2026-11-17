@@ -1,0 +1,2 @@
+FROM yopo-restart-sitl:ctbr-opencv-4.10
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*

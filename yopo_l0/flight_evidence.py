@@ -67,4 +67,20 @@ def acceptance(result, card):
         'gazebo_collision_free':truth.get('collision_samples')==0 and all(truth.get('samples',{}).get(k,0)>0 for k in ids),
         'gazebo_coverage_complete':all(truth.get('samples',{}).get(k,0)>0 and truth.get('missing_plan_samples',{}).get(k,1)==0 for k in ids),
     }
+    if card.card.get('criteria',{}).get('require_gazebo_native_depth',False):
+        native=result.get('native_depth',{})
+        vehicles=native.get('vehicles',{})
+        checks['gazebo_native_depth_only']=(native.get('source')=='gazebo-native-depth'
+            and native.get('fallback_used') is False and native.get('decode_errors')==[]
+            and result.get('depth_sources')==['gazebo-native-depth'])
+        checks['six_native_depth_streams_consumed']=(len(vehicles)==6 and all(
+            value.get('unique_consumed',0)>=100 and value.get('max_age_s',1.)<=0.20
+            and value.get('finite_pixels',0)>0 for value in vehicles.values()))
+        video=result.get('gazebo_video') or {}
+        first,last=video.get('first_gazebo_stamp_s'),video.get('last_gazebo_stamp_s')
+        span=0. if first is None or last is None else last-first
+        checks['gazebo_rendered_video']=(video.get('source')=='gazebo-native-rgb-camera'
+            and video.get('ffmpeg_exit_code')==0 and video.get('errors')==[]
+            and span>=0.90*float(result.get('sim_s',0.))
+            and video.get('frames',0)>=0.90*10.*span and bool(video.get('mp4_sha256')))
     return {'passed':all(checks.values()),'required_per_vehicle_horizontal_displacement_m':target,'checks':checks}

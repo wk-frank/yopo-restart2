@@ -196,6 +196,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     ap.add_argument("--control-mode", choices=("pva", "ctbr"), default=os.environ.get("YOPO_CONTROL_MODE", "pva"))
     ap.add_argument("--record-dt", type=float, default=float(os.environ.get("YOPO_RECORD_DT", "0")))
+    ap.add_argument("--depth-source", choices=("auto", "scene-card", "gazebo"), default=os.environ.get("YOPO_LIVE_DEPTH_SOURCE", "auto"))
     ap.add_argument("--world", default="default")
     ap.add_argument("--preflight-timeout", type=float, default=240.0)
     ap.add_argument("--dry-run", action="store_true", help="只写话题和定位模式，不连 ROS")
@@ -307,6 +308,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.control_mode == "ctbr" and not args.lockstep:
         print("CTBR requires --lockstep for fresh 50 Hz feedback", file=sys.stderr)
+        return 2
+    if args.depth_source == "gazebo" and (not args.lockstep or not args.scene_world or args.record_dt <= 0):
+        print("Gazebo depth requires lockstep, scene-world and record-dt > 0", file=sys.stderr)
         return 2
     positioning = _positioning(args.positioning)
     card = load_card(_scene_path(args.scene))
@@ -499,6 +503,22 @@ def calibrate_hover_thrust(session):
             pass
 
 
+def runtime_source(card, seed, native=False):
+    import hashlib
+    import subprocess
+    files = ["yopo_l0/net.py", "yopo_l0/depth_accel.py", "yopo_l0/ctbr.py", "yopo_l0/explore.py",
+             "yopo_l0/scene.py", "yopo_l0/sensor.py", "yopo_l0/wide_scene.py", "yopo_l0/sitl_bridge.py",
+             "yopo_l0/flight_evidence.py", "scripts/sitl/yopo_l0_live.py"]
+    if native:
+        files += ["yopo_l0/gazebo_native.py", "scripts/sitl/prepare_native_cameras.py",
+                  "scripts/sitl/in_container.sh", "scripts/sitl/run_yopo_l0_sitl.sh",
+                  "scripts/sitl/Dockerfile.gazebo-depth"]
+    return {"commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=_REPO,
+                    capture_output=True, text=True, check=True).stdout.strip(),
+            "sha256": {name: hashlib.sha256((_REPO/name).read_bytes()).hexdigest() for name in files},
+            "scene_sha256": card.hash, "seed": seed}
+
+
 def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no cover - 需要 rclpy / px4_msgs
     import rclpy
     from px4_msgs.msg import (
@@ -514,6 +534,10 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
     from sensor_msgs.msg import Image
     from std_msgs.msg import String
 
+    source_at_start = runtime_source(card, args.seed, args.depth_source == "gazebo") if args.control_mode == "ctbr" or args.record_dt > 0 else None
+    if source_at_start is not None:
+        Path(args.out).with_name("run-source.json").write_text(json.dumps(source_at_start, indent=2) + "\n")
+
     task = card.card.get("task") or {}
     max_s = float(args.max_s) if args.max_s is not None else float(task.get("duration_s", 45.0))
     # 编队飞行大约 20 s。45 s 的缺省 PLAN 超时留给上游。编队放宽到 60 s，仍不含起飞。
@@ -525,7 +549,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         policy=policy,
         live=LiveFleetConfig(
             positioning=positioning,
-            depth_source="auto",
+            depth_source=args.depth_source,
             initial_phase="WARMUP",
             plan_timeout_s=plan_timeout_s,
             control_mode=args.control_mode,
@@ -598,6 +622,16 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         gz.subscribe(Clock, f"/world/{args.world}/clock", on_clock)
     except Exception:
         gz = None
+    native_depth, recorder, video_result = None, None, None
+    if args.depth_source == "gazebo":
+        if gz is None:
+            raise RuntimeError("Gazebo transport required for native depth")
+        from yopo_l0.gazebo_native import NativeDepthSource, GazeboFlightRecorder
+        from yopo_l0.sensor import CameraConfig
+        native_depth = NativeDepthSource(gz, [slot.ident for slot in session.slots],
+                                         CameraConfig.from_card(card.card["camera"]), Path(args.out).parent,
+                                         args.world)
+        recorder = GazeboFlightRecorder(gz, Path(args.out).parent, args.world)
     if args.lockstep:
         if gz is None:
             print("锁步要 gz-transport（gz.transport13 / gz.msgs10），当前解释器没有。", file=sys.stderr)
@@ -675,7 +709,9 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         summary = state["summary"]
         return VehicleInbox(
             odometry=odom,
-            depth=state["depth"],
+            depth=(native_depth.frame(ns, float(sim["t"]), origin_s=float(clock.origin or 0.0),
+                                      consume=all(s.phase == "PLAN" for s in session.slots))
+                   if native_depth is not None and sim["t"] is not None else state["depth"]),
             obstacle_summary=summary if summary else None,
             armed=status.arming_state == ARMING_STATE_ARMED,
             offboard=status.nav_state == NAV_STATE_OFFBOARD,
@@ -774,6 +810,21 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                     break
                 continue
             elapsed = clock.elapsed(float(t_sim))
+            if native_depth is not None:
+                # Rendering runs asynchronously. Wait with the world paused, never synthesize a frame.
+                deadline = time.monotonic() + 15.0
+                while any(native_depth.frame(ns, float(t_sim)) is None for ns in slots):
+                    if time.monotonic() > deadline:
+                        failure = "GAZEBO_DEPTH_MISSING_OR_STALE"
+                        break
+                    time.sleep(0.005)
+                if failure:
+                    break
+                boxes = {ns: inbox_for(ns) for ns in slots}
+                recorder.active = True
+                with truth_lock:
+                    observer_positions = dict(truth)
+                recorder.follow(observer_positions, float(t_sim))
             if elapsed > max_s and session.result()["outcome"] == "RUNNING":
                 failure = f"MAX_S {max_s}"
                 break
@@ -826,6 +877,9 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
                             "drones": snapshot["drones"], "truth": truth_meter.summary(),
                             "control": {key: {k: v for k, v in value.items() if k != "samples"}
                                         for key, value in snapshot.get("flight_record", {}).items()}}
+                if native_depth is not None:
+                    progress["native_depth"] = native_depth.summary()
+                    progress["video_frames"] = recorder.frames
                 Path(args.out).with_name("progress.json").write_text(json.dumps(progress))
                 last_progress = float(elapsed)
             if snapshot["ok"] or snapshot.get("terminal"):
@@ -913,6 +967,8 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
         pass
     finally:
         stop.set()
+        if recorder is not None:
+            video_result = recorder.close()
         if stepper is not None:
             stepper.release()
         if executor is not None:
@@ -947,17 +1003,17 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
     else:
         payload["lockstep"] = {"enabled": False}
     if args.control_mode == "ctbr" or args.record_dt > 0.0:
-        import hashlib
-        import subprocess
-        files = ["yopo_l0/net.py", "yopo_l0/depth_accel.py", "yopo_l0/ctbr.py", "yopo_l0/explore.py", "yopo_l0/scene.py", "yopo_l0/sensor.py",
-                 "yopo_l0/wide_scene.py", "yopo_l0/sitl_bridge.py", "yopo_l0/flight_evidence.py",
-                 "scripts/sitl/yopo_l0_live.py"]
         payload["network_depth_backend"] = os.environ.get("YOPO_DEPTH_BACKEND", "core")
-        payload["source"] = {"commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=_REPO,
-                                 capture_output=True, text=True).stdout.strip(),
-                             "sha256": {name: hashlib.sha256((_REPO/name).read_bytes()).hexdigest() for name in files},
-                             "scene_sha256": card.hash, "seed": args.seed}
+        payload["source"] = source_at_start
+        unchanged = runtime_source(card, args.seed, args.depth_source == "gazebo") == source_at_start
+        payload["source"]["unchanged_through_run"] = unchanged
+        if not unchanged:
+            payload.update(ok=False, outcome="FAIL", reason="RUNTIME_SOURCE_CHANGED")
     payload["scene_world"] = scene_world_plan(card, args)
+    if native_depth is not None:
+        payload["native_depth"] = native_depth.summary()
+        payload["gazebo_video"] = video_result
+        native_depth.close()
     if truth_meter is not None:
         payload["truth_flight"] = truth_meter.summary()
     _write(args.out, payload)

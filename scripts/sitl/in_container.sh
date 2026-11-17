@@ -42,6 +42,7 @@ export YOPO_POSITIONING="$POSITIONING"
 # shellcheck disable=SC2317
 cleanup() {
   local pid
+  if [[ -f /root/.gz/rendering/ogre2.log ]]; then cp /root/.gz/rendering/ogre2.log "$OUT/ogre2.log"; fi
   while IFS= read -r pid; do
     if [[ -n "$pid" ]]; then
       kill "$pid" 2>/dev/null || true
@@ -106,6 +107,24 @@ if [[ "$PLANNER" == "yopo-l0" ]]; then
     PYTHONPATH="/repo:/repo/core/src${PYTHONPATH:+:$PYTHONPATH}"       python3 /repo/scripts/sitl/world_sdf.py         --scene "$scene_for_world"         "${base_world_args[@]}"         --out-dir "$OUT/worlds"         --summary "$OUT/world_sdf.json" >/dev/null
     export PX4_GZ_WORLDS="$OUT/worlds"
     echo "yopo scene world enabled: $OUT/worlds/default.sdf"
+    if [[ "${YOPO_LIVE_DEPTH_SOURCE:-auto}" == "gazebo" ]]; then
+      PYTHONPATH="/repo:/repo/core/src${PYTHONPATH:+:$PYTHONPATH}" python3 /repo/scripts/sitl/prepare_native_cameras.py \
+        --scene "$scene_for_world" --world "$OUT/worlds/default.sdf" \
+        --base-model /opt/PX4-Autopilot/Tools/simulation/gz/models/x500_base/model.sdf \
+        --out "$OUT/native_cameras.json"
+      # Start EGL rendering explicitly; PX4 attaches to this existing world.
+      export EGL_PLATFORM=surfaceless
+      if [[ "${YOPO_SITL_GAZEBO_GPU:-software}" == "software" ]]; then
+        export LIBGL_ALWAYS_SOFTWARE=1
+      else
+        unset LIBGL_ALWAYS_SOFTWARE
+      fi
+      gz sim -r -s --headless-rendering "$OUT/worlds/default.sdf" > "$OUT/gazebo-server.log" 2>&1 &
+      for _ in $(seq 1 180); do
+        gz service -l 2>/dev/null | grep -q '/world/default/scene/info' && break
+        sleep 1
+      done
+    fi
   fi
 fi
 python3 /repo/scripts/sitl/fleet.py layout --n "$N" --mission "$MISSION_MODE" --format json >/dev/null

@@ -246,6 +246,7 @@ if "${DOCKER[@]}" ps -q -f "name=^${NAME}$" | grep -q .; then
   set +e
   "${DOCKER[@]}" exec \
     -e YOPO_SITL_N="$N" -e YOPO_SITL_PLANNER=yopo-l0 -e YOPO_L0_SCENE="$SCENE" \
+    -e YOPO_LIVE_DEPTH_SOURCE="${YOPO_LIVE_DEPTH_SOURCE:-auto}" \
     -e YOPO_DEPTH_BACKEND="${YOPO_DEPTH_BACKEND:-core}" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
     -e YOPO_L0_POLICY="$POLICY" -e YOPO_CONTROL_MODE="$CONTROL_MODE" -e YOPO_RECORD_DT="$RECORD_DT" -e YOPO_DEPTH_BACKEND="${YOPO_DEPTH_BACKEND:-core}" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
     -e YOPO_L0_SEED="$SEED" -e YOPO_POSITIONING="$POSITIONING" \
@@ -282,10 +283,23 @@ if ! sitl_prepare_run_network; then
 fi
 printf 'network=%s\nowned=%s\n' "$SITL_RUN_NETWORK" "$SITL_RUN_NETWORK_OWNED" > "$RUN/docker_network.txt"
 net_args=(--network "$SITL_RUN_NETWORK")
+render_args=()
+case "${YOPO_SITL_GAZEBO_GPU:-software}" in
+  software) ;;
+  wsl-d3d12)
+    [[ -c /dev/dxg && -d /usr/lib/wsl ]] || { echo "WSL GPU libraries/device missing" >&2; exit 2; }
+    render_args=(--device=/dev/dxg -v /usr/lib/wsl:/usr/lib/wsl:ro
+      -e LD_LIBRARY_PATH=/usr/lib/wsl/lib -e GALLIUM_DRIVER=d3d12
+      -e MESA_LOADER_DRIVER_OVERRIDE=d3d12 -e MESA_D3D12_DEFAULT_ADAPTER_NAME=NVIDIA
+      -e YOPO_SITL_GAZEBO_GPU=wsl-d3d12)
+    ;;
+  *) echo "YOPO_SITL_GAZEBO_GPU must be software or wsl-d3d12" >&2; exit 2 ;;
+esac
 set +e
-"${DOCKER[@]}" run --rm --name "$NAME" "${net_args[@]}" \
+"${DOCKER[@]}" run --rm --name "$NAME" "${net_args[@]}" "${render_args[@]}" \
   -e ROS_DOMAIN_ID=0 -e YOPO_SITL_N="$N" -e YOPO_SITL_MISSION=1 \
   -e YOPO_SITL_PLANNER=yopo-l0 -e YOPO_L0_SCENE="$SCENE" -e YOPO_L0_POLICY="$POLICY" \
+  -e YOPO_LIVE_DEPTH_SOURCE="${YOPO_LIVE_DEPTH_SOURCE:-auto}" \
   -e YOPO_DEPTH_BACKEND="${YOPO_DEPTH_BACKEND:-core}" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
   -e YOPO_CONTROL_MODE="$CONTROL_MODE" -e YOPO_RECORD_DT="$RECORD_DT" -e YOPO_DEPTH_BACKEND="${YOPO_DEPTH_BACKEND:-core}" -e YOPO_SENSOR_SPATIAL="${YOPO_SENSOR_SPATIAL:-0}" -e YOPO_SENSOR_ACCEL="${YOPO_SENSOR_ACCEL:-0}" \
   -e YOPO_L0_SEED="$SEED" \
