@@ -1,0 +1,42 @@
+{
+  "name": "explore-3-pillars",
+  "note": "无编队三机水平横排起飞柱林高速穿越卡（不进 scenes/suite.txt）。障碍带与 crossing-pillars 完全一致。",
+  "geometry": "crossing-pillars-scene.json",
+  "ground_z": 0.0,
+  "drones": [
+    {"id": "uav0", "start_enu": [0.0, 0.0, 1.5]},
+    {"id": "uav1", "start_enu": [0.0, 8.0, 1.5]},
+    {"id": "uav2", "start_enu": [0.0, -8.0, 1.5]}
+  ],
+  "task": {
+    "type": "explore",
+    "duration_s": 25.0,
+    "velocity_mps": 10.2,
+    "replan_hz": 25.0,
+    "x_goal_m": 19.5,
+    "x_finish_m": 15.5,
+    "z_goal_m": 1.5,
+    "y_bounds_m": [-11.5, 11.5],
+    "z_bounds_m": [0.75, 3.1],
+    "obstacle_x_span_m": [3.7, 14.8],
+    "arrive_radius_m": 3.4,
+    "lookahead_m": 10.0,
+    "clearance_margin_m": 0.16,
+    "peer_margin_m": 0.30
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.4,
+    "goal_speed_mps": 0.2,
+    "goal_hold_s": 1.0,
+    "frozen": false
+  },
+  "camera": {
+    "width": 160, "height": 96, "hfov_deg": 90.0, "vfov_deg": 60.0,
+    "min_range_m": 0.2, "max_range_m": 20.0, "noise_std_m": 0.02,
+    "mount_xyz_body": [0.13, 0.0, 0.02]
+  },
+  "dynamics": {"model": "point_mass_lag", "tau_s": 0.06, "kp": 11.5, "kd": 5.1, "a_max": 20.0},
+  "rates_hz": {"physics": 100, "camera": 30, "planner": 25},
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+}

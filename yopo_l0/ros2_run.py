@@ -68,7 +68,7 @@ def _import_rclpy():
 def execute(card: SceneCard, cfg: RunConfig, *, inspect: dict | None = None) -> RunOutput:
     """建世界节点和每机节点，跑与进程内相同的锁步，返回同一份 RunOutput。
 
-    formation 任务把 FormationFleet.transport_override 指到话题传输，exchange 因此不再
+    formation / explore 任务把 transport_override 指到话题传输，exchange 因此不再
     使用进程内队列。运行结束（含异常）后一定清回 None，避免漏到下一次进程内编队。
     """
     rclpy = _import_rclpy()
@@ -107,8 +107,8 @@ def main(argv=None) -> int:
     ap.add_argument("--scene", required=True, help="场景卡 JSON")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument(
-        "--policy", default="upstream", choices=sorted({*POLICIES, "formation"}),
-        help="hover、upstream、certified；formation 只用于 task.type 为 formation 的场景卡",
+        "--policy", default="upstream", choices=sorted({*POLICIES, "formation", "explore"}),
+        help="hover、upstream、certified；formation / explore 只用于同名 task.type 的场景卡",
     )
     ap.add_argument("--shadow", choices=("on", "off"), default="on",
                     help="影子盾记录：on（默认）或 off。只记录会否拒绝，不改批准动作")
@@ -121,8 +121,8 @@ def main(argv=None) -> int:
     ap.add_argument("--bus-reorder", type=float, default=None, help="插到队首的概率，对齐 G3 explore 的 reorder")
     a = ap.parse_args(_normalize_shadow(argv))
     card = load_card(a.scene)
-    if a.policy == "formation" and card.card["task"]["type"] != "formation":
-        raise SystemExit("--policy formation 只适用于 task.type 为 formation 的场景卡")
+    if a.policy in ("formation", "explore") and card.card["task"]["type"] != a.policy:
+        raise SystemExit(f"--policy {a.policy} 只适用于 task.type 为 {a.policy} 的场景卡")
     out = execute(card, RunConfig(
         seed=a.seed,
         policy=a.policy,

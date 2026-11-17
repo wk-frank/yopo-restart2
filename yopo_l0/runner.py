@@ -212,7 +212,13 @@ def run(card: SceneCard, cfg: RunConfig, *, bridge=None) -> RunOutput:
 
         fleet = SwitchFleet.from_card(tuned, dt, record_inputs=cfg.record_planner_inputs)
         approval_cls = SwitchApproval
-    track_goal = task["type"] in ("goto", "formation", "crossing", "switch")
+    elif task["type"] == "explore":
+        from .explore import ExploreFleet
+        from .explore import LocalApproval as ExploreApproval
+
+        fleet = ExploreFleet.from_card(tuned, dt, record_inputs=cfg.record_planner_inputs)
+        approval_cls = ExploreApproval
+    track_goal = task["type"] in ("goto", "formation", "crossing", "switch", "explore")
     if track_goal:
         gtol, gspeed, ghold = float(crit["goal_tolerance_m"]), float(crit["goal_speed_mps"]), float(crit["goal_hold_s"])
     else:
@@ -421,6 +427,8 @@ def run(card: SceneCard, cfg: RunConfig, *, bridge=None) -> RunOutput:
                 s = replace(s, t=(k + 1) / phys)  # 时间戳只取仿真时钟整数 tick，不累加浮点
                 dr["state"] = s
                 dist = card.min_distance(s.p)
+                if task["type"] == "explore":
+                    dr["goal"] = fleet.goal_of(dr["id"])
                 err = float(np.linalg.norm(s.p - dr["goal"]))
                 dr["min_obs"] = min(dr["min_obs"], dist)
                 dr["max_err"] = max(dr["max_err"], err)
@@ -550,6 +558,8 @@ def run(card: SceneCard, cfg: RunConfig, *, bridge=None) -> RunOutput:
         radius_m = read_safe_radius(tuned.get("policy_params"))
         result["safe_radius_m"] = radius_m
         result["upstream_deviation"] = deviates_from_upstream(radius_m)
+        if task["type"] == "explore":
+            result["upstream_deviation"] = True
         if fleet_block is not None and fleet_block.get("pillar_clearance"):
             result["upstream_deviation"] = True
             result["pillar_clearance_deviation"] = fleet_block["pillar_clearance"]["deviation"]

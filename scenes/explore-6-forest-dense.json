@@ -1,0 +1,48 @@
+{
+  "name": "explore-6-forest-dense",
+  "note": "无编队六机统一水平线 x=0 横排起飞密林（dense, 树表最小净距 1.7m）>6m/s 高速穿越卡（不进 scenes/suite.txt）。",
+  "forest": {
+    "density": "dense",
+    "seed": 7
+  },
+  "ground_z": 0.0,
+  "drones": [
+    {"id": "uav0", "start_enu": [0.0, -7.5, 1.5]},
+    {"id": "uav1", "start_enu": [0.0, -4.5, 1.5]},
+    {"id": "uav2", "start_enu": [0.0, -1.5, 1.5]},
+    {"id": "uav3", "start_enu": [0.0, 1.5, 1.5]},
+    {"id": "uav4", "start_enu": [0.0, 4.5, 1.5]},
+    {"id": "uav5", "start_enu": [0.0, 7.5, 1.5]}
+  ],
+  "task": {
+    "type": "explore",
+    "duration_s": 30.0,
+    "velocity_mps": 10.2,
+    "replan_hz": 25.0,
+    "x_goal_m": 42.0,
+    "x_finish_m": 32.0,
+    "z_goal_m": 1.5,
+    "y_bounds_m": [-13.5, 13.5],
+    "z_bounds_m": [0.75, 3.4],
+    "obstacle_x_span_m": [8.0, 30.0],
+    "arrive_radius_m": 4.2,
+    "lookahead_m": 10.0,
+    "clearance_margin_m": 0.15,
+    "peer_margin_m": 0.30
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.4,
+    "goal_speed_mps": 0.2,
+    "goal_hold_s": 1.0,
+    "frozen": false
+  },
+  "camera": {
+    "width": 160, "height": 96, "hfov_deg": 90.0, "vfov_deg": 60.0,
+    "min_range_m": 0.2, "max_range_m": 20.0, "noise_std_m": 0.02,
+    "mount_xyz_body": [0.13, 0.0, 0.02]
+  },
+  "dynamics": {"model": "point_mass_lag", "tau_s": 0.06, "kp": 11.5, "kd": 5.1, "a_max": 20.0},
+  "rates_hz": {"physics": 100, "camera": 30, "planner": 25},
+  "seeds": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+}
