@@ -235,3 +235,40 @@ def test_explore_closed_loop_pillars_and_dense_forest():
     assert out_d.result["explore"]["obstacle_collisions"] == 0
     assert out_d.result["explore"]["inter_drone_collisions"] == 0
     assert float(out_d.result["explore"]["avg_forest_speed_mps"]) > 6.0
+
+
+def test_benchmark_report_and_runs_json_integrity():
+    runs_path = ROOT / "docs/research/explore-free-swarm-runs.json"
+    md_path = ROOT / "docs/research/explore-free-swarm.md"
+    assert runs_path.is_file()
+    assert md_path.is_file()
+
+    payload = json.loads(runs_path.read_text(encoding="utf-8"))
+    assert payload["schema"] == "yopo-restart/explore-vs-crossing-benchmark/1"
+    assert payload["seeds"] == list(range(10))
+    assert payload["total_runs"] == 210
+    assert len(payload["runs"]) == 210
+
+    by_key = {(s["group_id"], s["arm_id"]): s for s in payload["summaries"]}
+    for gid in (
+        "3_pillars",
+        "3_forest_med",
+        "3_forest_dense",
+        "6_forest_sparse",
+        "6_forest_med",
+        "6_forest_dense",
+    ):
+        for arm in ("explore_6mps", "explore_fast"):
+            row = by_key[(gid, arm)]
+            assert row["seed_success_count"] == 10
+            assert row["drone_arrival_rate"] == pytest.approx(1.0)
+            assert row["obstacle_collisions"] == 0
+            assert row["inter_drone_collisions"] == 0
+            assert row["min_obstacle_clearance_m"] > 0.0
+            assert row["min_inter_drone_distance_m"] > 0.70
+        fast = by_key[(gid, "explore_fast")]
+        base = by_key[(gid, "crossing_base")]
+        assert fast["mean_belt_speed_3d_mps"] > 6.0
+        assert fast["mean_belt_vx_mps"] > 6.0
+        assert fast["mean_arrival_time_s"] < base["mean_arrival_time_s"]
+
