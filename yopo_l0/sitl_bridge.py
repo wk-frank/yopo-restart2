@@ -1892,6 +1892,8 @@ class LiveFleetSession:
                 yaw=float(state["yaw_enu"]),
                 t=ingest_t,
             )
+            if getattr(self.fleet, 'depth_only', False):
+                self.fleet.depth_fields[did].observe(frame,state['position_enu'],state['rotation_enu_flu'])
             ingest(did, frame, view)
             if self.cfg.depth_source not in ("depth", "gazebo"):
                 slot.depth_source = "scene-card"
@@ -1975,7 +1977,7 @@ class LiveFleetSession:
             position = np.asarray(state["position_enu"], dtype=float)
             if float(position[2]) <= self.body:
                 continue
-            dist = float(self.card.min_distance(position))
+            dist = (math.inf if getattr(self.fleet,'depth_only',False) else float(self.card.min_distance(position)))
             self._min_clear = min(self._min_clear, dist - self.body)
             judged = slot.phase in ("TAKEOFF", "PLAN")
             if judged:
@@ -2493,6 +2495,10 @@ class LiveFleetSession:
                     "hover_calibration_samples": 0 if slot.ctbr is None else slot.ctbr.hover.samples}
                 for slot in self.slots}
         payload["shadow"] = bool(self.shadow)
+        if getattr(self.fleet,'depth_only',False):
+            payload['perception_contract']={'mode':'depth-only','planning_geometry_count':len(self.card.obstacles),
+                'scene_geometry_abort_enabled':False,'obstacle_source':'per-aircraft Gazebo depth surfaces',
+                'peer_source':'communicated trajectory tubes','unknown_space':'reject unobserved candidate samples'}
         payload["shadow_reject_rate"] = None
         payload["shadow_reject_histogram"] = None
         payload["shadow_gates"] = None
@@ -2523,6 +2529,16 @@ def make_live_session(
     """
     name = resolve_live_policy(card, policy)
     cfg = live or LiveFleetConfig()
+    if (card.card.get('task') or {}).get('depth_only',False):
+        if cfg.depth_source != 'gazebo' or name != 'explore':
+            raise ValueError('depth-only mode requires Gazebo depth and explore policy')
+        import copy
+        planning=copy.deepcopy(card.card)
+        for key in ('geometry','wide_field','forest'):
+            planning.pop(key,None)
+        planning['geometry']={}
+        planning['ground_z']=None
+        card=SceneCard(card.path,planning,())
     drones = list(card.card["drones"])
     n = len(drones)
     dyn = card.card.get("dynamics") or {}

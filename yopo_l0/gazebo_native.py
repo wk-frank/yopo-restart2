@@ -26,6 +26,18 @@ def prepare_native_scene(world_path, base_model_path, camera: CameraConfig, *, r
     world = root.find("world")
     if world is None:
         raise ValueError("SDF world missing")
+    cylinders=[m for m in world.findall('model') if m.find('link/collision/geometry/cylinder') is not None]
+    if len(cylinders)>5000:
+        group=ET.SubElement(world,'model',name='observed_obstacle_field')
+        ET.SubElement(group,'static').text='true'
+        link=ET.SubElement(group,'link',name='field')
+        for index,model in enumerate(cylinders):
+            for tag in ('collision','visual'):
+                child=model.find('link/'+tag)
+                child.set('name',f'{tag}_{index}')
+                ET.SubElement(child,'pose').text=model.findtext('pose','0 0 0 0 0 0')
+                link.append(child)
+            world.remove(model)
     # Explicit systems keep physics and PX4 sensors when a world plugin is added.
     for suffix, name in (("physics", "Physics"), ("user-commands", "UserCommands"),
                          ("scene-broadcaster", "SceneBroadcaster"), ("imu", "Imu"),

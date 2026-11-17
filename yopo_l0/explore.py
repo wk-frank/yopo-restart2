@@ -535,6 +535,12 @@ class ExploreFleet:
         geom_dict = card.get("geometry") if isinstance(card.get("geometry"), dict) else {}
         all_obs = parse_geometry(geom_dict, card.get("ground_z")) if geom_dict else ()
         self._obs_field = _FastObstacleField(all_obs)
+        self.depth_only=bool(task.get("depth_only",False))
+        if self.depth_only:
+            if all_obs:
+                raise ValueError("depth-only planner must not receive scene geometry")
+            from .depth_local import DepthLocalField
+            self.depth_fields={did:DepthLocalField((card.get('camera') or {}).get('mount_xyz_body',(0,0,0))) for did in self.members}
         # 检查是否存在靠近 x_goal 的 end_wall 以限制自然制动上界
         end_walls = [
             float(ob.lo[0])
@@ -1130,6 +1136,8 @@ class ExploreFleet:
         return None
 
     def _plan_one_drone(self, did: str, now: float) -> np.ndarray | None:
+        if self.depth_only:
+            self._obs_field=self.depth_fields[did]
         sense = self._sense.get(did)
         if sense is None or sense[0] is None:
             self._count(did, "NO_DEPTH")
