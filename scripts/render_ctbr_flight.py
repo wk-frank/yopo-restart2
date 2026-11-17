@@ -96,7 +96,7 @@ def render_video(data,dest,colors):
             points=[];disp=[]
             for i,(tr,p,ts) in enumerate(zip(tracks,arrays,times)):
                 k=min(int(np.searchsorted(ts,t)),len(ts)-1);q=p[k];points.append(q);disp.append(float(np.linalg.norm(q[:2]-np.array(tr['start'])[:2])))
-                tail=p[max(0,k-90):k+1];trails[i].set_data(tail[:,0],tail[:,1]);trails[i].set_3d_properties(tail[:,2]);dots[i].set_data([q[0]],[q[1]]);dots[i].set_3d_properties([q[2]])
+                tail=p[max(0,k-35):k+1];trails[i].set_data(tail[:,0],tail[:,1]);trails[i].set_3d_properties(tail[:,2]);dots[i].set_data([q[0]],[q[1]]);dots[i].set_3d_properties([q[2]])
                 maplines[i].set_data(p[:k+1,0],p[:k+1,1]);mapdots[i].set_data([q[0]],[q[1]])
             centre=np.mean(points,axis=0);ax.set_xlim(centre[0]-45,centre[0]+45);ax.set_ylim(centre[1]-35,centre[1]+35)
             nearby=obs[(np.abs(obs[:,0]-centre[0])<43)&(np.abs(obs[:,1]-centre[1])<33)]

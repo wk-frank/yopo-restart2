@@ -19,8 +19,8 @@
   - 缺省 `--control-mode pva` 时，发布话题、`OffboardControlMode` 标志位与设定点字节与当前主干逐位一致。
   - 保持 `px4_parameters_written == []`、`scenes/suite.txt` 与全部既有场景卡不变。
 - **分阶段模式切换（仅 `PLAN` 段启用 CTBR）：**
-  - `WARMUP`、`TAKEOFF`、到达终点后的悬停收敛段与 `LAND`（`NAV_LAND`）全程保留现有 `TrajectorySetpoint`（`OffboardControlMode(position=True, velocity=True, acceleration=True, attitude=False, body_rate=False)`）。
-  - 仅当 `--control-mode ctbr` 且无人机处于 `phase == "PLAN"` 时，切换为 `OffboardControlMode(position=False, velocity=False, acceleration=False, attitude=False, body_rate=True)` 并以锁步控制频率（50–100 Hz）发布 `/px4_i/fmu/in/vehicle_rates_setpoint`。一旦进入终点保持、超时刹停或降落阶段，立即无冲击切回 `TrajectorySetpoint` / `NAV_LAND`。
+  - `WARMUP`、`TAKEOFF`、终点目标锁定后的减速/悬停收敛段与 `LAND`（`NAV_LAND`）全程保留现有 `TrajectorySetpoint`（`OffboardControlMode(position=True, velocity=True, acceleration=True, attitude=False, body_rate=False)`）。
+  - 仅当 `--control-mode ctbr` 且无人机处于 `phase == "PLAN"`、尚未进入终点收敛时，切换为 `OffboardControlMode(position=False, velocity=False, acceleration=False, attitude=False, body_rate=True)` 并以锁步控制频率（50–100 Hz）发布 `/px4_i/fmu/in/vehicle_rates_setpoint`。终点目标锁定后一次性接管并锁存，后续规划码变化不得重启 CTBR；进入终点收敛、失败或降落阶段时切回 `TrajectorySetpoint` / `NAV_LAND`。
 
 ## 3. 微分平坦与几何 `SE(3)` 控制律规范（ENU/FLU → PX4 NED/FRD）
 

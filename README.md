@@ -21,6 +21,8 @@ scripts/demo.sh     # 产物在 out/demo/
 
 ## CTBR 六机大场景（report-only）
 
+seed 0 实际锁步 SITL 验收：六机全部到达并降落，Gazebo 各机水平位移 942.72–942.82 m，且 CTBR 段各机均超过 900 m；碰撞与记录缺失均为 0。
+
 [中心向外长程报告](docs/research/ctbr-center900.md)：2.2 km × 2.2 km、3025 处障碍，每机水平位移要求至少 900 m。显式启用 CTBR，实际 PX4/Gazebo 锁步 SITL，保留真值与控制记录；原同种子高速性能对照仍待做。
 
 ```bash
