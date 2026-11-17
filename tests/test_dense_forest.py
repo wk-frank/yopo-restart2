@@ -11,11 +11,14 @@ def test_density_exceeds_five_times_previous_without_shrinking_trunks():
 
 def test_mesh_batching_preserves_collision_geometry(tmp_path):
     world=ET.fromstring('<world><model name="observed_obstacle_field"><link name="field"><collision name="c"><geometry><cylinder><radius>.6</radius><length>6</length></cylinder></geometry></collision><visual name="v"><pose>10 20 3 0 0 0</pose><geometry><cylinder><radius>.6</radius><length>6</length></cylinder></geometry></visual></link></model></world>')
-    collision=ET.tostring(world.find('.//collision'))
     assert batch_trunk_visuals(world,tmp_path)==1
-    assert ET.tostring(world.find('.//collision'))==collision
+    assert world.find('.//collision/geometry/mesh/uri').text==str(tmp_path/'trunks-0000.obj')
+    import json
+    manifest=json.loads((tmp_path/'manifest.json').read_text())
+    assert manifest['trunks'][0]['radius']==.6
+    assert manifest['trunks'][0]['length']==6
     lines=(tmp_path/'trunks-0000.obj').read_text().splitlines()
     vertices=[list(map(float,l.split()[1:])) for l in lines if l.startswith('v ')]
-    assert len(vertices)==32
+    assert len(vertices)==64
     assert min(p[2] for p in vertices)==0 and max(p[2] for p in vertices)==6
     assert abs(max(p[0] for p in vertices)-10.6)<1e-6

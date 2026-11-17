@@ -1,4 +1,4 @@
-"""Batched trunk render meshes; each original analytical collision stays in the SDF."""
+"""Static 32-sided trunk mesh batches for rendering and physical collision."""
 import math
 import xml.etree.ElementTree as ET
 
@@ -9,7 +9,8 @@ def batch_trunk_visuals(world, directory, chunk_size=256):
     if link is None:
         raise ValueError('dense forest compound link missing')
     visuals=list(link.findall('visual'))
-    sides=16
+    sides=32
+    manifest=[]
     for chunk,start in enumerate(range(0,len(visuals),chunk_size)):
         path=directory/f'trunks-{chunk:04d}.obj'
         with path.open('w') as output:
@@ -21,6 +22,7 @@ def batch_trunk_visuals(world, directory, chunk_size=256):
                 x,y,z=xyzrpy[:3]
                 radius=float(visual.findtext('geometry/cylinder/radius'))
                 length=float(visual.findtext('geometry/cylinder/length'))
+                manifest.append({'center':[x,y,z],'radius':radius,'length':length,'mesh':path.name})
                 for zz in (z-length/2,z+length/2):
                     for i in range(sides):
                         angle=2*math.pi*i/sides
@@ -37,6 +39,14 @@ def batch_trunk_visuals(world, directory, chunk_size=256):
         material=ET.SubElement(visual,'material')
         ET.SubElement(material,'ambient').text='.28 .16 .07 1'
         ET.SubElement(material,'diffuse').text='.45 .26 .12 1'
+        collision=ET.SubElement(link,'collision',name=f'trunk_mesh_{chunk}')
+        mesh=ET.SubElement(ET.SubElement(collision,'geometry'),'mesh')
+        ET.SubElement(mesh,'uri').text=str(path)
     for visual in visuals:
         link.remove(visual)
+    for collision in list(link.findall('collision')):
+        if collision.find('geometry/cylinder') is not None:
+            link.remove(collision)
+    import json
+    (directory/'manifest.json').write_text(json.dumps({'sides':sides,'trunks':manifest},separators=(',',':')))
     return len(visuals)

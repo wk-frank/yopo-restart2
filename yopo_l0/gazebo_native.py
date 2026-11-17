@@ -97,7 +97,8 @@ def prepare_native_scene(world_path, base_model_path, camera: CameraConfig, *, r
     ET.SubElement(clip, "near").text = str(camera.min_range_m)
     ET.SubElement(clip, "far").text = str(camera.max_range_m)
     base_model_path.write_text(ET.tostring(base, encoding="unicode"), encoding="utf-8")
-    return {"depth_hz": 15, "camera": camera.__dict__, "renderer": "Gazebo Ogre2 EGL",
+    meshes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (world_path.parent/'trunk_meshes').glob('*')}
+    return {"depth_hz": 15, "camera": camera.__dict__, "renderer": "Gazebo Ogre2 EGL", "mesh_sha256":meshes,
             "record": record, "world_sha256": hashlib.sha256(world_path.read_bytes()).hexdigest(),
             "base_model_sha256": hashlib.sha256(base_model_path.read_bytes()).hexdigest()}
 
