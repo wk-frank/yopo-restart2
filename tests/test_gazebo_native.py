@@ -67,3 +67,19 @@ def test_native_sdf_preserves_inertia_and_collisions_and_is_idempotent(tmp_path)
     assert len(link.findall('collision')) == 1 and len(link.findall('sensor')) == 1
     assert ET.fromstring(world.read_text()).find("world/model[@name='obstacle']") is not None
     assert link.findtext('sensor/camera/image/format') == 'R_FLOAT32'
+
+
+def test_native_depth_rejects_unsupported_policy_before_ros_or_arming(tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+    from conftest import ROOT
+    spec=importlib.util.spec_from_file_location('native_gazebo_cli_guard', ROOT/'scripts/sitl/yopo_l0_live.py')
+    module=importlib.util.module_from_spec(spec)
+    sys.modules[spec.name]=module
+    spec.loader.exec_module(module)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('ROS/arming must not be reached for an unsupported policy')
+    monkeypatch.setattr(module, '_run_ros', forbidden)
+    code=module.main(['--scene',str(ROOT/'scenes/g2-pillar.json'),'--out',str(tmp_path/'result.json'),
+        '--n','1','--policy','upstream','--lockstep','--scene-world','--record-dt','.2','--depth-source','gazebo'])
+    assert code==2

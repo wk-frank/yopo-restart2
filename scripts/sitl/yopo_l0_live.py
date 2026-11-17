@@ -312,6 +312,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.depth_source == "gazebo" and (not args.lockstep or not args.scene_world or args.record_dt <= 0):
         print("Gazebo depth requires lockstep, scene-world and record-dt > 0", file=sys.stderr)
         return 2
+    if args.depth_source == "gazebo" and args.policy != "explore":
+        print("Gazebo native depth currently requires --policy explore", file=sys.stderr)
+        return 2
     positioning = _positioning(args.positioning)
     card = load_card(_scene_path(args.scene))
     try:

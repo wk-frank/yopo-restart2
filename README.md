@@ -21,19 +21,22 @@ scripts/demo.sh     # 产物在 out/demo/
 
 ## CTBR 六机大场景（report-only）
 
-seed 0 实际锁步 SITL 验收：六机全部到达并降落，Gazebo 各机水平位移 942.72–942.82 m，且 CTBR 段各机均超过 900 m；碰撞与记录缺失均为 0。
-
-[中心向外长程报告](docs/research/ctbr-center900.md)：2.2 km × 2.2 km、3025 处障碍，每机水平位移要求至少 900 m。显式启用 CTBR，实际 PX4/Gazebo 锁步 SITL，保留真值与控制记录；原同种子高速性能对照仍待做。
+[Gazebo 原生深度长程验收](docs/research/gazebo-native-center900.md)：六机从 2.2 km × 2.2 km 场景中心同向出发，3025 个障碍覆盖全图。seed 0 实际锁步 SITL 中 6/6 到达并降落，Gazebo 水平位移 942.81–945.76 m，CTBR 段每机 936.72–937.55 m，碰撞与真值缺失样本均为 0。六机各消费 3293 帧不同的原生深度；同趟 Gazebo/Ogre2 直接录得 237.1 秒实际画面。
 
 ```bash
 docker build --pull=false -t yopo-restart-sitl:ctbr-opencv-4.10 -f scripts/sitl/Dockerfile.ctbr scripts/sitl
+docker build -f scripts/sitl/Dockerfile.gazebo-depth -t yopo-restart-sitl:gazebo-depth .
 YOPO_SITL_DOCKER_NETWORK=bridge YOPO_SITL_WALL_TIMEOUT=7200 \
-YOPO_DEPTH_BACKEND=opencv YOPO_SENSOR_SPATIAL=1 YOPO_SENSOR_ACCEL=1 \
-flock /tmp/yopo-sitl.lock scripts/sitl/run_yopo_l0_sitl.sh \
-  --image yopo-restart-sitl:ctbr-opencv-4.10 \
-  --scene scenes/explore-6-center900-ctbr.json --n 6 --policy explore \
+YOPO_LIVE_DEPTH_SOURCE=gazebo YOPO_SITL_GAZEBO_GPU=wsl-d3d12 \
+YOPO_DEPTH_BACKEND=opencv flock /tmp/yopo-sitl.lock \
+scripts/sitl/run_yopo_l0_sitl.sh --image yopo-restart-sitl:gazebo-depth \
+  --scene scenes/explore-6-center900-gz-depth.json --n 6 --policy explore \
   --lockstep --scene-world --control-mode ctbr --record-dt 0.2 --seed 0
 ```
+
+`gazebo-flight.mp4`、原生深度抽样、时间戳与源码哈希会写入打印出的运行目录；带位移标注的视频可用 `scripts/render_gazebo_flight.py --run <运行目录> --out <输出目录>` 生成。原生模式缺帧或帧过期时失败关闭，不做合成回退。D3D12 选项用于本机 WSL GPU，软件 EGL 为默认选择。
+
+这是单 seed、已知地图几何安全盾辅助的 SITL 结果。起飞和终点保持使用 PVA，巡航与绕障使用 CTBR，最后 NAV_LAND；不改 PX4 参数。[首轮场景卡深度记录](docs/research/ctbr-center900.md) 和原 [CTBR-1](docs/research/ctbr-flatness-ticket.md) 多种子高速性能对照分别保留，后者尚待完成。
 
 ## L0（box CPU，无界面，锁步确定性）
 

@@ -1,0 +1,199 @@
+{
+  "run": "20261117T071921-yopo-n6",
+  "runtime_source": {
+    "commit": "f58469b7a4ededfc98c324f424c05b1b8390450e",
+    "sha256": {
+      "yopo_l0/net.py": "24b0a2343f4a6ad908ec335aaa112ff0ed40df9257016aa53a87f34693d798eb",
+      "yopo_l0/depth_accel.py": "a2516d18a6712c1c9e5f14abc4b903a1d0e7b09f90d81cd852efc59afd072ed3",
+      "yopo_l0/ctbr.py": "0482332be42034ac8675dbd74c1c85e1fcdd7b0296172aebb51b41ca6f1dc408",
+      "yopo_l0/explore.py": "edf5c2ac14ceca4e93b389926113759a641c3fc985ccfc37643961f809d4acf9",
+      "yopo_l0/scene.py": "67ea2a376fb5dd570ae2c517d1789367f2a1af77563f49d3b6783664849a1643",
+      "yopo_l0/sensor.py": "a3259e64d82c4859eb6a0a1d08db7f76324fbf78917a65b1974d1965cb3fb50e",
+      "yopo_l0/wide_scene.py": "07d8ee8e82fa99abb06d9ef6a386ba19ec799b1d7c910b4f9e2a67d01f94f86d",
+      "yopo_l0/sitl_bridge.py": "7b49b8d779d9316d1ef61d1edab3b3d4f2bc1c450e9bacb70e217f2198523b67",
+      "yopo_l0/flight_evidence.py": "00bc833419541e22f56305ad14e64ef5fa50c3c6329ee4403e485ac9ca1cc32e",
+      "scripts/sitl/yopo_l0_live.py": "dbb608c4fb4f9156e9d406249091d8af1b396fa726441fadf0acbcdf8cd02b85",
+      "yopo_l0/gazebo_native.py": "021e3e9cdad215c8e23528ccd195892f5e831198615863c465932920d210f29e",
+      "scripts/sitl/prepare_native_cameras.py": "1454baefceb6fcbf54ae7b11b34b14c80228726ea6eed7982c259fabd1dbf941",
+      "scripts/sitl/in_container.sh": "42d6159231588deedc62defe96d2bacdb5400970d20abb33394617db7984f4b4",
+      "scripts/sitl/run_yopo_l0_sitl.sh": "a2fa1dff7945c206b71ef615833bfcefdd50f073b785faee3a278527bbbaa28f",
+      "scripts/sitl/Dockerfile.gazebo-depth": "0bcc16815939a6c0352a44aa348542b9336a5dae1f4ca07ca86f25713a0aa3cb"
+    },
+    "scene_sha256": "a75373582f3b2c0e0cbdb3feb924ac758f05040ff91195042455d2a04c08e0a6",
+    "seed": 0,
+    "unchanged_through_run": true
+  },
+  "acceptance": {
+    "passed": true,
+    "required_per_vehicle_horizontal_displacement_m": 900.0,
+    "checks": {
+      "px4_sitl_success": true,
+      "six_arrived": true,
+      "ctbr_used_by_every_vehicle": true,
+      "per_vehicle_ctbr_distance": true,
+      "no_px4_parameter_writes": true,
+      "all_world_obstacles_present": true,
+      "per_vehicle_odometry_900m": true,
+      "per_vehicle_gazebo_900m": true,
+      "gazebo_collision_free": true,
+      "gazebo_coverage_complete": true,
+      "gazebo_native_depth_only": true,
+      "six_native_depth_streams_consumed": true,
+      "gazebo_rendered_video": true
+    }
+  },
+  "sim_s": 237.1,
+  "wall_s": 1650.727261454,
+  "vehicles": [
+    {
+      "id": "uav0",
+      "gazebo_displacement_m": 942.8122577587329,
+      "px4_displacement_m": 940.0083138942266,
+      "ctbr_gazebo_displacement_m": 937.2036269522678,
+      "ctbr_ticks": 10450,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 127889124
+      }
+    },
+    {
+      "id": "uav1",
+      "gazebo_displacement_m": 945.7626100264865,
+      "px4_displacement_m": 942.9689476599128,
+      "ctbr_gazebo_displacement_m": 937.5501287995729,
+      "ctbr_ticks": 10680,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 131474527
+      }
+    },
+    {
+      "id": "uav2",
+      "gazebo_displacement_m": 945.3267336521383,
+      "px4_displacement_m": 942.4849951580006,
+      "ctbr_gazebo_displacement_m": 937.3762072283382,
+      "ctbr_ticks": 10470,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 129079896
+      }
+    },
+    {
+      "id": "uav3",
+      "gazebo_displacement_m": 942.9207817481608,
+      "px4_displacement_m": 940.1086121771242,
+      "ctbr_gazebo_displacement_m": 937.1020089035721,
+      "ctbr_ticks": 10530,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 130243452
+      }
+    },
+    {
+      "id": "uav4",
+      "gazebo_displacement_m": 942.9450654867528,
+      "px4_displacement_m": 940.1079426056266,
+      "ctbr_gazebo_displacement_m": 937.427927614523,
+      "ctbr_ticks": 10550,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 130835676
+      }
+    },
+    {
+      "id": "uav5",
+      "gazebo_displacement_m": 943.1093339928497,
+      "px4_displacement_m": 940.3963224594714,
+      "ctbr_gazebo_displacement_m": 936.7164817551505,
+      "ctbr_ticks": 10455,
+      "native_depth": {
+        "received": 3641,
+        "consumed": 21948,
+        "unique_consumed": 3293,
+        "max_age_s": 0.07600000000002183,
+        "first_stamp_s": 11.224,
+        "last_stamp_s": 253.868,
+        "last_consumed_stamp_s": 246.468,
+        "finite_pixels": 132274314
+      }
+    }
+  ],
+  "truth": {
+    "source": "gazebo-dynamic-pose",
+    "max_horizontal_displacement_m": {
+      "uav0": 942.8122577587329,
+      "uav1": 945.7626100264865,
+      "uav2": 945.3267336521383,
+      "uav3": 942.9207817481608,
+      "uav4": 942.9450654867528,
+      "uav5": 943.1093339928497
+    },
+    "samples": {
+      "uav0": 10974,
+      "uav1": 10981,
+      "uav2": 10979,
+      "uav3": 10982,
+      "uav4": 10980,
+      "uav5": 10981
+    },
+    "missing_plan_samples": {
+      "uav0": 0,
+      "uav1": 0,
+      "uav2": 0,
+      "uav3": 0,
+      "uav4": 0,
+      "uav5": 0
+    },
+    "min_body_surface_clearance_plan_m": 0.298477816318256,
+    "min_centre_peer_distance_plan_m": 2.3578381911529953,
+    "collision_samples": 0
+  },
+  "video": {
+    "source": "gazebo-native-rgb-camera",
+    "topic": "/yopo/gazebo/flight_camera",
+    "file": "gazebo-flight.mp4",
+    "frames": 2371,
+    "fps": 10,
+    "first_gazebo_stamp_s": 16.9,
+    "last_gazebo_stamp_s": 253.9,
+    "raw_frame_stream_sha256": "6199780d691dff5b9c330fe9ddd39dea835cf991ea7d6cb1c95414fcb4e6eb59",
+    "ffmpeg_exit_code": 0,
+    "errors": [],
+    "mp4_sha256": "9dea4713a5d7d61a8f90b5ff1e901f505f6f55ef226eda732bc1a139c7713fa0"
+  },
+  "max_video_stamp_gap_s": 0.10000000000002274,
+  "archived_depth_frames_verified": 264,
+  "px4_parameters_written": [],
+  "affected_tests_passed": 106,
+  "mandatory_checks": "scenes strict, doc links, research index, phase1 closeout PASS"
+}
