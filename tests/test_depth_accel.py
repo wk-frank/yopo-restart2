@@ -28,3 +28,13 @@ def test_optional_opencv_matches_wide_scene_frames(monkeypatch):
         assert np.array_equal(network_depth(raw),core_depth(raw))
     for raw in [np.full((96,160),np.nan,dtype=np.float32),np.full((27,49),12.,dtype=np.float32)]:
         assert np.array_equal(network_depth(raw),core_depth(raw))
+
+
+def test_optional_dependency_is_checked_before_flight(monkeypatch):
+    import sys
+    from yopo_l0.depth_accel import validate_depth_backend
+    monkeypatch.setitem(sys.modules,'cv2',None)
+    monkeypatch.setenv('YOPO_DEPTH_BACKEND','core')
+    assert validate_depth_backend()=='core'
+    monkeypatch.setenv('YOPO_DEPTH_BACKEND','opencv')
+    with pytest.raises(ImportError):validate_depth_backend()

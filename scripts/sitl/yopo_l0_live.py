@@ -334,6 +334,13 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    if not args.dry_run:
+        from yopo_l0.depth_accel import validate_depth_backend
+        try:
+            validate_depth_backend()
+        except (ImportError, ValueError) as exc:
+            print(f"depth backend preflight: {exc}", file=sys.stderr)
+            return 2
     if args.dry_run:
         plan = live_topic_plan(card, positioning=positioning, seed=args.seed, policy=policy)
         if args.control_mode != "pva":

@@ -4,6 +4,15 @@ import numpy as np
 from yopo_swarm_core.depth import network_depth as core_network_depth
 
 
+def validate_depth_backend():
+    backend=os.environ.get('YOPO_DEPTH_BACKEND','core')
+    if backend not in ('core','opencv'):
+        raise ValueError('YOPO_DEPTH_BACKEND must be core or opencv')
+    if backend=='opencv':
+        import cv2  # fail before arming if the explicit optional runtime is absent
+    return backend
+
+
 def network_depth(raw_m):
     backend=os.environ.get('YOPO_DEPTH_BACKEND','core')
     if backend=='core':
