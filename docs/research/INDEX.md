@@ -136,6 +136,9 @@
 | ego-swarm-baseline.md |  | EGO-Swarm 外部基线（E-C1） | 无 |
 | ego-swarm-comparison.md |  | yopo-restart 与 EGO-Swarm 对照 | report-only、冻结 |
 | ego-swarm-density.json |  | （无说明字段） | 无 |
+| explore-free-swarm-runs.json |  | （无说明字段） | 无 |
+| explore-free-swarm.md |  | 无编队水平横排起飞高效率多机穿越（`ExploreFleet`）10 种子基准报告 | report-only、冻结 |
+| explore-sitl.md |  | 无编队水平横排起飞与高速多机避障穿越 PX4 SITL 锁步实测（`explore-sitl`，report-only） | report-only |
 | m4-ros2-matrix-runs.json | m4 | M4-ROS2：formation-6-open 六档 × seeds 0–4 的 ROS 2 矩阵 | report-only、冻结 |
 | m4-ros2-matrix.md | m4 | 票 M4-ROS2：formation-6-open 六档 ROS 2 矩阵（只报数） | report-only、冻结 |
 | m5-a1-closeout-audit.md | m5 | M5-A1：口径 A 第一期收口前置核验 | report-only |

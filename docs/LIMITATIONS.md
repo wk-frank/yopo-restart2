@@ -146,3 +146,4 @@ L0 **不等价于** L1，也不是实飞：
 3. **锁步下电池模拟报 unhealthy（不改 `BAT_` 参数）。** [BAT1](research/bat1-lockstep-battery.md)（[#157](https://github.com/unununnnn/yopo-restart/pull/157)）已诊断：B1 第二版 10 趟三机交叉仍是 5/10 出现 `Battery unhealthy`、0 趟 failsafe。根因是部分 PX4 实例解锁后停止发布 `battery_status`，指挥官按仿真钟 5 s 超时；电压始终 16.2 V，自由跑也会出现。要修仍需改 PX4 或镜像。
 4. **学生网络线暂停。** D6e 到 D9 的收益都在训练噪声范围内，人手先放到方向 B。限速 2.5 m/s 仍只是 D9 的候选对照臂，不改库默认。
 5. **实飞仍不在范围内。** 不要把 L0 或 SITL 的到达率读成实飞。
+6. **`explore`（无编队水平横排）只报数，不冻结，不进 `scenes/suite.txt`。** [EXPLORE](research/explore-free-swarm.md)：L0 十 seed 六个场景 120/120 到达、碰撞 0，六机密林 9.67 m/s、6.29 s；这用了 `a_max` 约 20 m/s² 的敏捷动力学和 ratio=1.7 的时间相似律，同卡 1x 标称动力学（`a_max=6`）为 5.70 m/s、11.70 s，两档都在报告里。偏离上游，结果标 `upstream_deviation`。[EXPLORE-SITL](research/explore-sitl.md)：锁步 PX4 SITL 在不改 PX4 参数下六机林带 4/5（对照 S8 `crossing-6-forest-sitl80` 0/3）、三机柱林 3/3、六机开阔 3/3、三机林带 4/6；速度受未改参数的 PX4 位置环限制（约 6–7.5 m/s），不能读成 L0 的 9.7 m/s，也不是实飞。
