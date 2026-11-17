@@ -513,7 +513,7 @@ def runtime_source(card, seed, native=False):
              "yopo_l0/scene.py", "yopo_l0/sensor.py", "yopo_l0/wide_scene.py", "yopo_l0/sitl_bridge.py",
              "yopo_l0/flight_evidence.py", "scripts/sitl/yopo_l0_live.py"]
     if native:
-        files += ["yopo_l0/gazebo_native.py", "yopo_l0/depth_local.py", "scripts/sitl/prepare_native_cameras.py",
+        files += ["yopo_l0/gazebo_native.py", "yopo_l0/depth_local.py", "yopo_l0/forest_mesh.py", "scripts/sitl/prepare_native_cameras.py",
                   "scripts/sitl/in_container.sh", "scripts/sitl/run_yopo_l0_sitl.sh",
                   "scripts/sitl/Dockerfile.gazebo-depth"]
     return {"commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=_REPO,

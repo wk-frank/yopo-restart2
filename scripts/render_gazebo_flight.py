@@ -43,6 +43,8 @@ def annotate(run: Path, dest: Path):
             canvas = np.full((900,1600,3),(24,20,16),np.uint8)
             canvas[80:800,:1280] = frame
             text(canvas,'YOPO + CTBR  /  GAZEBO NATIVE FLIGHT',28,34,.85,thick=2)
+            if raw.get('perception_contract',{}).get('mode')=='depth-only':
+                text(canvas,'DEPTH ONLY / NO PRIOR MAP',1100,34,.5,(140,230,150),1)
             text(canvas,f'6 aircraft  |  Centre-out elastic formation  |  SIM {t:6.1f} s',28,64,.55)
             text(canvas,'Gazebo camera / full view',965,64,.45)
             text(canvas,'MEASURED DISPLACEMENT',1300,108,.52)

@@ -87,5 +87,7 @@ def acceptance(result, card):
         contract=result.get('perception_contract',{})
         checks['no_prior_map_planning']=(contract.get('mode')=='depth-only' and contract.get('planning_geometry_count')==0
             and contract.get('scene_geometry_abort_enabled') is False)
-        checks['four_times_obstacle_count']=len(card.card['geometry']['cylinders'])==12100
+        count=len(card.card['geometry']['cylinders'])
+        required=int((card.card.get('criteria') or {}).get('min_obstacle_count',12100))
+        checks['required_obstacle_density']=count>=required and result.get('scene_world',{}).get('n_cylinders')==count
     return {'passed':all(checks.values()),'required_per_vehicle_horizontal_displacement_m':target,'checks':checks}

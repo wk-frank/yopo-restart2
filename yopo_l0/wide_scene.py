@@ -11,7 +11,8 @@ def generate_wide_geometry(config):
     extent = float(config.get('half_extent_m', 1100.0))
     tile = float(config.get('tile_m', 40.0))
     clearing = float(config.get('launch_clear_radius_m', 18.0))
-    if not (100.0 <= extent <= 10000.0 and 8.0 <= tile <= 100.0 and 0.0 <= clearing < tile):
+    launch_exception=bool(config.get('allow_empty_launch_tiles',False))
+    if not (100.0 <= extent <= 10000.0 and 8.0 <= tile <= 100.0 and 0.0 <= clearing < (extent/2 if launch_exception else tile)):
         raise ValueError('invalid wide field dimensions')
     n = int(round(2.0 * extent / tile))
     if not math.isclose(n * tile, 2.0 * extent):
@@ -28,6 +29,8 @@ def generate_wide_geometry(config):
                 if np.linalg.norm(xy) > clearing + radius:
                     break
             else:
+                if launch_exception:
+                    continue
                 raise ValueError('launch clearing consumed a full tile')
             trees.append(dict(name=f'wide_tree_{ix}_{iy}',center_xy=xy.tolist(),radius=radius,
                               z_lo=0.0,z_hi=float(rng.uniform(5.0,9.0))))

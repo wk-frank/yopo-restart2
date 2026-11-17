@@ -38,6 +38,9 @@ def prepare_native_scene(world_path, base_model_path, camera: CameraConfig, *, r
                 ET.SubElement(child,'pose').text=model.findtext('pose','0 0 0 0 0 0')
                 link.append(child)
             world.remove(model)
+    if len(cylinders)>50000:
+        from .forest_mesh import batch_trunk_visuals
+        batch_trunk_visuals(world,world_path.parent/'trunk_meshes')
     # Explicit systems keep physics and PX4 sensors when a world plugin is added.
     for suffix, name in (("physics", "Physics"), ("user-commands", "UserCommands"),
                          ("scene-broadcaster", "SceneBroadcaster"), ("imu", "Imu"),

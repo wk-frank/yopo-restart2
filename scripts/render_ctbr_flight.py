@@ -57,7 +57,7 @@ def render(result_path, scene_path, dest, video=False):
     ax=fig.add_subplot(grid[:,0]);route=fig.add_subplot(grid[0,1]);dist=fig.add_subplot(grid[1,1])
     obs=np.asarray(data['obstacles'],dtype=float).reshape(-1,4);ax.scatter(obs[:,0],obs[:,1],s=2,c='#97ad9c',alpha=.7)
     ax.add_patch(plt.Circle((0,0),900,fill=False,color='#8796a8',ls='--',lw=1))
-    ax.scatter([0],[0],c='black',s=20);ax.set(xlim=(-1150,1150),ylim=(-1150,1150),aspect='equal',title='2.2 km x 2.2 km | 3025 obstacles',xlabel='East X (m)',ylabel='North Y (m)')
+    ax.scatter([0],[0],c='black',s=20);ax.set(xlim=(-1150,1150),ylim=(-1150,1150),aspect='equal',title=f'2.2 km x 2.2 km | {len(obs)} obstacles',xlabel='East X (m)',ylabel='North Y (m)')
     route.scatter(obs[:,0],obs[:,1],s=np.pi*(obs[:,2]*5)**2,c='#9eafa3');route.set(xlim=(-20,980),ylim=(-55,55),title='Recorded flight corridor (Gazebo truth)',xlabel='East X (m)',ylabel='North Y (m)')
     for i,tr in enumerate(data['tracks']):
         samples=tr['samples'];p=np.array([s['g'] or s['p'] for s in samples]);t=np.array([s['t'] for s in samples])
