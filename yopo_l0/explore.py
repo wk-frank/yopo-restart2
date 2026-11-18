@@ -542,11 +542,23 @@ class ExploreFleet:
         all_obs = parse_geometry(geom_dict, card.get("ground_z")) if geom_dict else ()
         self._obs_field = _FastObstacleField(all_obs)
         self.depth_only=bool(task.get("depth_only",False))
+        cam_cfg = card.get("camera") or {}
+        self.strict_unknown = bool(cam_cfg.get("strict_unknown", False))
         if self.depth_only:
             if all_obs:
                 raise ValueError("depth-only planner must not receive scene geometry")
             from .depth_local import DepthLocalField
-            self.depth_fields={did:DepthLocalField((card.get('camera') or {}).get('mount_xyz_body',(0,0,0))) for did in self.members}
+            swept_r = cam_cfg.get("swept_radius_m", self.radius if self.strict_unknown else 1.2)
+            self.depth_fields={
+                did: DepthLocalField(
+                    cam_cfg.get("mount_xyz_body", (0, 0, 0)),
+                    max_range=cam_cfg.get("max_range_m", 20.0),
+                    strict_unknown=self.strict_unknown,
+                    swept_radius_m=swept_r,
+                    cam_rotation=cam_cfg.get("extrinsic_rotation_body_cam"),
+                )
+                for did in self.members
+            }
         # 检查是否存在靠近 x_goal 的 end_wall 以限制自然制动上界
         end_walls = [
             float(ob.lo[0])
@@ -851,7 +863,10 @@ class ExploreFleet:
     ) -> tuple[list[np.ndarray], float]:
         """利用本机深度图扇区净空与邻机预测位置，生成无槽位约束的最优前向引导点列表及最开阔偏航角。"""
         d = np.asarray(depth, dtype=np.float32)
-        clean = np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 20.0)
+        if self.strict_unknown or np.isposinf(d).any():
+            clean = np.where(np.isposinf(d), 20.0, np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 2.0))
+        else:
+            clean = np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 20.0)
         h, w = clean.shape
         r_mid0, r_mid1 = max(0, int(0.26 * h)), min(h, int(0.74 * h))
         r_hi0, r_hi1 = max(0, int(0.08 * h)), max(1, int(0.32 * h))
