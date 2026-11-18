@@ -97,14 +97,15 @@ class CTBRCommand:
 
 
 class FlatnessCTBRController:
-    def __init__(self, *, kp=3.5, kv=3.0, kr=5.0, max_rate=2.0):
+    def __init__(self, *, kp=3.5, kv=3.0, kr=5.0, max_rate=2.0, max_rate_acc=6.0):
         self.kp, self.kv, self.kr = float(kp), float(kv), float(kr)
         self.max_rate = float(max_rate)
+        self.max_rate_acc = float(max_rate_acc)
         self.hover = HoverThrustEstimator()
         self.last_thrust = None
         self.last_rates = np.zeros(3)
 
-    def command(self, p_ref, v_ref, a_ref, j_ref, yaw, yaw_rate, position, velocity, rotation):
+    def command(self, p_ref, v_ref, a_ref, j_ref, yaw, yaw_rate, position, velocity, rotation, *, dt: float = 0.02):
         R = np.asarray(rotation, dtype=float)
         if R.shape != (3, 3) or not np.isfinite(R).all():
             raise ValueError("expected finite ENU/FLU rotation")
@@ -123,7 +124,9 @@ class FlatnessCTBRController:
         # Bound feedforward independently so it cannot drive past the tilt target.
         rates = R.T @ Rd @ np.clip(ff, -.6, .6) - self.kr * error
         rates = np.clip(enu_flu_to_ned_frd_rates(rates), -self.max_rate, self.max_rate)
-        rates = self.last_rates + np.clip(rates - self.last_rates, -.12, .12)
+        step_dt = 0.02 if dt is None or not math.isfinite(float(dt)) or float(dt) <= 0.0 else float(np.clip(dt, 0.002, 0.10))
+        slew = self.max_rate_acc * step_dt
+        rates = self.last_rates + np.clip(rates - self.last_rates, -slew, slew)
         self.last_rates = rates.copy()
         force = acc + np.array([0.0, 0.0, GRAVITY])
         projected = max(float(force @ R[:, 2]), 0.0)

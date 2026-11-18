@@ -195,6 +195,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="upstream 走 YOPO。formation / crossing / switch / explore 只用于同名 task.type 的卡，机间消息留在进程内总线",
     )
     ap.add_argument("--control-mode", choices=("pva", "ctbr"), default=os.environ.get("YOPO_CONTROL_MODE", "pva"))
+    ap.add_argument("--ctbr-shadow", action="store_true", default=_env_flag("YOPO_CTBR_SHADOW"),
+                    help="PVA retains control authority while CTBR is computed and logged in parallel")
     ap.add_argument("--record-dt", type=float, default=float(os.environ.get("YOPO_RECORD_DT", "0")))
     ap.add_argument("--depth-source", choices=("auto", "scene-card", "gazebo"), default=os.environ.get("YOPO_LIVE_DEPTH_SOURCE", "auto"))
     ap.add_argument("--world", default="default")
@@ -556,6 +558,7 @@ def _run_ros(args, card, positioning: str, policy: str) -> int:  # pragma: no co
             initial_phase="WARMUP",
             plan_timeout_s=plan_timeout_s,
             control_mode=args.control_mode,
+            ctbr_shadow=bool(args.ctbr_shadow),
             record_dt_s=args.record_dt,
             shadow_env_evidence=bool(args.shadow_env_evidence),
             fleet_shadow=bool(args.fleet_shadow),

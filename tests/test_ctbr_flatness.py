@@ -92,3 +92,35 @@ def test_terminal_pva_handover_is_latched_across_replanning():
                       commands=[],planned=True,depth_source='scene-card',roundtrip=0.,position=session.slots[0].position)
     assert cmd.rates_setpoint is None
     assert not cmd.offboard['body_rate']
+
+
+def test_rate_slew_scales_with_dt_and_pva_shadow_mode_logs_without_taking_authority():
+    c100 = FlatnessCTBRController(max_rate_acc=6.0)
+    c50 = FlatnessCTBRController(max_rate_acc=6.0)
+    z = np.zeros(3)
+    cmd100 = c100.command([5, 5, 2], [2, 2, 0], [3, 3, 0], [0, 0, 0], 0.5, 0.2, z, z, np.eye(3), dt=0.01)
+    cmd50 = c50.command([5, 5, 2], [2, 2, 0], [3, 3, 0], [0, 0, 0], 0.5, 0.2, z, z, np.eye(3), dt=0.02)
+    assert np.max(np.abs(cmd100.rates_frd)) == pytest.approx(0.06)
+    assert np.max(np.abs(cmd50.rates_frd)) == pytest.approx(0.12)
+
+    card = load_card(ROOT / 'scenes/explore-6-open-sitl80.json')
+    session = make_live_session(
+        card,
+        policy='explore',
+        live=LiveFleetConfig(initial_phase='PLAN', control_mode='pva', ctbr_shadow=True, record_dt_s=0.02),
+    )
+    vehicles = [FakePx4Vehicle(d['start_enu']) for d in card.card['drones']]
+    inbox = {
+        s.ident['namespace']: VehicleInbox(
+            odometry=odometry_message_from_odometry(v.odometry(), 0),
+            armed=True,
+            offboard=True,
+            landed=False,
+            hover_thrust=0.34,
+        )
+        for s, v in zip(session.slots, vehicles)
+    }
+    cmds = session.step(0.0, inbox)
+    assert all(c.rates_setpoint is None and c.offboard['position'] and not c.offboard['body_rate'] for c in cmds)
+    assert all(s.ctbr_shadow_ticks == 1 and 'ctbr_shadow_rates' in s.flight_samples[-1] for s in session.slots)
+

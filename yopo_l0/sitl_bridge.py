@@ -1353,6 +1353,7 @@ class VehicleInbox:
     offboard: bool | None = None
     landed: bool | None = None
     preflight_ok: bool = True
+    hover_thrust: float | None = None
 
 
 @dataclass(frozen=True)
@@ -1405,6 +1406,7 @@ class LiveFleetConfig:
     setpoint_gain_p: float = 0.0
     setpoint_gain_v: float = 0.0
     control_mode: str = "pva"
+    ctbr_shadow: bool = False
     record_dt_s: float = 0.0
 
     def __post_init__(self) -> None:
@@ -1453,6 +1455,7 @@ class _LiveSlot:
         self.shadow = None
         self.ctbr = None
         self.ctbr_ticks = 0
+        self.ctbr_shadow_ticks = 0
         self.ctbr_finished = False
         self.pva_ticks = 0
         self.ctbr_last_yaw = None
@@ -1710,7 +1713,7 @@ class LiveFleetSession:
             raise ValueError("formation / crossing / switch / explore 会话要带同名 fleet，其他策略不带")
         if policy in FLEET_POLICIES and bus is None:
             raise ValueError(f"{policy} 会话要带 MessageBus")
-        if cfg.control_mode == "ctbr" and policy != "explore":
+        if (cfg.control_mode == "ctbr" or cfg.ctbr_shadow) and policy != "explore":
             raise ValueError("CTBR currently requires policy=explore")
         self.card = card
         self.cfg = cfg
@@ -1721,7 +1724,7 @@ class LiveFleetSession:
         self._plan_origin: float | None = None
         self._formation_t: float | None = None
         self.slots = [_LiveSlot(bridge, ident, cfg.initial_phase) for bridge, ident in zip(bridges, idents)]
-        if cfg.control_mode == "ctbr":
+        if cfg.control_mode == "ctbr" or cfg.ctbr_shadow:
             from .ctbr import FlatnessCTBRController
             for slot in self.slots:
                 slot.ctbr = FlatnessCTBRController()
@@ -1772,6 +1775,14 @@ class LiveFleetSession:
                 decoded[ns] = apply_world_offset(decode_vehicle_odometry(inbox.odometry, now_s=now_s), slot.offset_enu)
             except ValueError:
                 decoded[ns] = None
+            if (slot.ctbr is not None and inbox.hover_thrust is not None
+                    and slot.phase == "TAKEOFF" and decoded[ns] is not None):
+                st = decoded[ns]
+                slot.ctbr.hover.observe_hover(
+                    float(inbox.hover_thrust),
+                    float(st["velocity_enu"][2]),
+                    float(st["acceleration_enu"][2]),
+                )
         self._decoded = decoded
         if self.cfg.control_mode == "ctbr":
             ground = self.card.card.get("ground_z")
@@ -2026,6 +2037,7 @@ class LiveFleetSession:
         position,
     ) -> LiveCommand:
         rates = None
+        shadow_rates = None
         # A terminal goal marks the start of PVA convergence, not just a new
         # short polynomial. Latch this handover so replanning cannot switch the
         # vehicle back into rates control while it is braking/holding.
@@ -2048,11 +2060,19 @@ class LiveFleetSession:
             dt = 0.0 if slot.ctbr_last_t is None else now_s - slot.ctbr_last_t
             yaw_rate = (math.atan2(math.sin(yaw - slot.ctbr_last_yaw), math.cos(yaw - slot.ctbr_last_yaw)) / dt
                         if dt > 1e-6 and slot.ctbr_last_yaw is not None else 0.0)
+            step_dt = dt if dt > 1e-6 else float(slot.bridge.cfg.physics_dt)
             control = slot.ctbr.command(p, v, a, jerk, yaw, yaw_rate,
-                                       state["position_enu"], state["velocity_enu"], state["rotation_enu_flu"])
-            rates = control.fields(now_s)
+                                       state["position_enu"], state["velocity_enu"], state["rotation_enu_flu"],
+                                       dt=step_dt)
+            fields = control.fields(now_s)
             slot.ctbr_last_yaw, slot.ctbr_last_t = yaw, now_s
-            slot.ctbr_ticks += 1
+            if self.cfg.control_mode == "ctbr":
+                rates = fields
+                slot.ctbr_ticks += 1
+            else:
+                shadow_rates = fields
+                slot.ctbr_shadow_ticks += 1
+                slot.pva_ticks += int(setpoint is not None)
         else:
             slot.pva_ticks += int(setpoint is not None)
             slot.ctbr_last_t = None
@@ -2061,13 +2081,16 @@ class LiveFleetSession:
             slot.max_horizontal_displacement_m = max(slot.max_horizontal_displacement_m, displacement)
         if self.cfg.record_dt_s > 0.0 and position is not None:
             if not slot.flight_samples or now_s - slot.flight_samples[-1]["t_s"] >= self.cfg.record_dt_s - 1e-9:
-                slot.flight_samples.append({"t_s": float(now_s), "phase": slot.phase,
+                row = {"t_s": float(now_s), "phase": slot.phase,
                     "p": _vec_list(position), "v": None if slot.velocity is None else _vec_list(slot.velocity),
                     "yaw": float(slot.yaw), "control": "ctbr" if rates is not None else "pva",
                     "ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["position"])),
                     "rates": rates,
                     "body_up": None if state is None else _vec_list(state["rotation_enu_flu"][:, 2]),
-                    "a_ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["acceleration"]))})
+                    "a_ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["acceleration"]))}
+                if shadow_rates is not None:
+                    row["ctbr_shadow_rates"] = shadow_rates
+                slot.flight_samples.append(row)
         self._record_trace(slot, now_s, position, setpoint)
         setpoint = setpoint_to_local(setpoint, slot.offset_enu)
         if slot.trace and slot.trace[-1].get("t_s") == float(now_s) and setpoint is not None:
