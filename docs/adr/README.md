@@ -16,5 +16,7 @@
 | [0014](0014-elastic-slot-clearance-gate.md) | 六机林带槽位是软目标，COMMIT 前净空门过滤 |
 | [0015](0015-ghost-brake-stops.md) | 六机林带自检只看邻机 committed + previous + 预留；林带卡暂关进度门控 |
 | [0016](0016-m0-m4-freeze-recommendation.md) | M0–M4 判据冻结（frank 2026-11-10 批准；M2 队形门 6.0 m） |
+| [0017](0017-single-explore-policy-with-adaptive-cohesion.md) | 三机实机障碍任务全程用单一 `explore` 加自适应横向凝聚（`formation` 动态切换留作未来项） |
+| [0018](0018-staggered-broadcast-dual-track-over-ack-mutex.md) | 三机实机采用错峰单向多项式广播与双轨占用并集，不设双向 ACK 锁 |
 
 M0 样例表：[docs/results/m0-g2-pillar.md](../results/m0-g2-pillar.md)。票 11 收口的冻结建议表：[docs/results/11-freeze-recommendation.md](../results/11-freeze-recommendation.md)。
