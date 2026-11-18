@@ -485,6 +485,10 @@ class ExploreFleet:
         cohesion = task.get("cohesion") or {}
         self.cohesion_span_m = _nonneg_float("cohesion.max_progress_span_m", cohesion.get("max_progress_span_m", 0.0))
         self.cohesion_lateral_gain = _nonneg_float("cohesion.lateral_gain", cohesion.get("lateral_gain", 0.0))
+        self.cohesion_open_lateral_gain = _nonneg_float(
+            "cohesion.open_lateral_gain", cohesion.get("open_lateral_gain", self.cohesion_lateral_gain)
+        )
+        self.cohesion_open_depth_m = _positive_float("cohesion.open_depth_m", cohesion.get("open_depth_m", 12.0))
         self.cohesion_holds = 0
         self.dt = _positive_float("physics_dt", physics_dt)
         self.record_inputs = bool(record_inputs)
@@ -825,6 +829,17 @@ class ExploreFleet:
         self._terminal_goal[did] = chosen
         return chosen
 
+    def effective_lateral_gain(self, forward_clearance_m: float) -> float:
+        """Interpolate lateral slot cohesion from obstacle-rich to open corridor."""
+        base = self.cohesion_lateral_gain
+        high = self.cohesion_open_lateral_gain
+        if high <= base:
+            return base
+        lo_m = 6.0
+        hi_m = max(self.cohesion_open_depth_m, lo_m + 1e-3)
+        alpha = min(max((float(forward_clearance_m) - lo_m) / (hi_m - lo_m), 0.0), 1.0)
+        return base + alpha * (high - base)
+
     def _select_carrots(
         self,
         did: str,
@@ -902,8 +917,9 @@ class ExploreFleet:
 
             wall_pen = 0.8 * abs(cy_raw - cy)
             smooth_pen = 0.07 * abs(cy - prev_y)
+            lat_gain = self.effective_lateral_gain(d_mid)
             util = 2.2 * cos_w + 0.42 * min(d_mid, 15.0) - peer_pen - wall_pen - smooth_pen
-            util -= self.cohesion_lateral_gain * abs(cy - float(self.starts[did][1]))
+            util -= lat_gain * abs(cy - float(self.starts[did][1]))
             scored.append((util, np.array([cx, cy, cz], dtype=float), float(cy), d_mid))
 
         scored.sort(key=lambda item: item[0], reverse=True)

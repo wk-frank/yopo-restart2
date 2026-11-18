@@ -1,0 +1,114 @@
+{
+  "name": "explore-3-d435-center900",
+  "note": "Three-aircraft Orin Nano 8GB + D435 baseline derived from dense-forest900: symmetric horizontal launch, depth-only planning (no prior obstacle geometry), clearance-adaptive lateral cohesion.",
+  "ground_z": 0.0,
+  "drones": [
+    {
+      "id": "uav0",
+      "start_enu": [
+        0.0,
+        -4.0,
+        2.5
+      ]
+    },
+    {
+      "id": "uav1",
+      "start_enu": [
+        0.0,
+        0.0,
+        2.5
+      ]
+    },
+    {
+      "id": "uav2",
+      "start_enu": [
+        0.0,
+        4.0,
+        2.5
+      ]
+    }
+  ],
+  "task": {
+    "type": "explore",
+    "duration_s": 720.0,
+    "velocity_mps": 3.0,
+    "replan_hz": 15.0,
+    "x_goal_m": 940.0,
+    "x_finish_m": 920.0,
+    "z_goal_m": 2.5,
+    "y_bounds_m": [
+      -16.0,
+      16.0
+    ],
+    "z_bounds_m": [
+      1.2,
+      4.5
+    ],
+    "obstacle_x_span_m": [
+      18.0,
+      1100.0
+    ],
+    "arrive_radius_m": 5.0,
+    "lookahead_m": 10.0,
+    "clearance_margin_m": 0.8,
+    "peer_margin_m": 2.0,
+    "odom_replan_err_m": 0.5,
+    "cohesion": {
+      "max_progress_span_m": 8.0,
+      "lateral_gain": 0.12,
+      "open_lateral_gain": 0.36,
+      "open_depth_m": 12.0
+    },
+    "depth_only": true
+  },
+  "criteria": {
+    "body_radius_m": 0.35,
+    "goal_tolerance_m": 0.6,
+    "goal_speed_mps": 0.3,
+    "goal_hold_s": 1.0,
+    "frozen": false,
+    "min_horizontal_displacement_m": 900.0,
+    "require_gazebo_native_depth": true,
+    "min_obstacle_count": 60500
+  },
+  "camera": {
+    "width": 160,
+    "height": 96,
+    "hfov_deg": 90.0,
+    "vfov_deg": 61.92751306414704,
+    "min_range_m": 0.2,
+    "max_range_m": 20.0,
+    "noise_std_m": 0.0,
+    "mount_xyz_body": [
+      0.35,
+      0.0,
+      0.18
+    ]
+  },
+  "dynamics": {
+    "model": "point_mass_lag",
+    "tau_s": 0.1,
+    "kp": 4.5,
+    "kd": 3.2,
+    "a_max": 6.0
+  },
+  "rates_hz": {
+    "physics": 100,
+    "camera": 15,
+    "planner": 15
+  },
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "wide_field": {
+    "half_extent_m": 1100.0,
+    "tile_m": 8.0,
+    "launch_clear_radius_m": 18.0,
+    "seed": 19,
+    "allow_empty_launch_tiles": true
+  }
+}

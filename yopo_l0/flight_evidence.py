@@ -49,6 +49,10 @@ def acceptance(result, card):
     records=result.get('flight_record',{})
     truth=result.get('truth_flight',{})
     ids=[d['id'] for d in card.card['drones']]
+    n_expected=len(ids)
+    arrived_key='six_arrived' if n_expected==6 else 'all_arrived'
+    depth_streams_key='six_native_depth_streams_consumed' if n_expected==6 else 'all_native_depth_streams_consumed'
+    expected_ns={''} if n_expected==1 else {f'px4_{i+1}' for i in range(n_expected)}
     def ctbr_distance(did):
         start=np.asarray(next(d['start_enu'] for d in card.card['drones'] if d['id']==did),dtype=float)
         return any(s.get('control')=='ctbr' and s.get('truth_p') is not None
@@ -57,7 +61,8 @@ def acceptance(result, card):
                    for s in records.get(did,{}).get('samples',[]))
     checks={
         'px4_sitl_success':result.get('ok') is True and result.get('adapter')=='px4-ros' and result.get('fake_px4') is False,
-        'six_arrived':len(ids)==6 and result.get('arrived')==6,
+        arrived_key:(n_expected>0 and result.get('arrived')==n_expected
+                     and set(ids).issubset(records) and set(ids).issubset(truth.get('max_horizontal_displacement_m',{}))),
         'ctbr_used_by_every_vehicle':result.get('control_mode')=='ctbr' and all(records.get(k,{}).get('ctbr_ticks',0)>0 for k in ids),
         'per_vehicle_ctbr_distance':all(ctbr_distance(k) for k in ids),
         'no_px4_parameter_writes':result.get('px4_parameters_written')==[],
@@ -73,7 +78,7 @@ def acceptance(result, card):
         checks['gazebo_native_depth_only']=(native.get('source')=='gazebo-native-depth'
             and native.get('fallback_used') is False and native.get('decode_errors')==[]
             and result.get('depth_sources')==['gazebo-native-depth'])
-        checks['six_native_depth_streams_consumed']=(len(vehicles)==6 and all(
+        checks[depth_streams_key]=(len(vehicles)==n_expected and set(vehicles)==expected_ns and all(
             value.get('unique_consumed',0)>=100 and value.get('max_age_s',1.)<=0.20
             and value.get('finite_pixels',0)>0 for value in vehicles.values()))
         video=result.get('gazebo_video') or {}
