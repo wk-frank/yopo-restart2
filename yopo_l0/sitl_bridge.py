@@ -1413,6 +1413,8 @@ class LiveFleetConfig:
         self.positioning = normalize_positioning(self.positioning)
         if self.control_mode not in ("pva", "ctbr"):
             raise ValueError("control_mode must be pva or ctbr")
+        if self.ctbr_shadow and self.control_mode != "pva":
+            raise ValueError("CTBR shadow requires PVA control authority")
         if not math.isfinite(self.record_dt_s) or self.record_dt_s < 0.0:
             raise ValueError("record_dt_s must be finite and nonnegative")
         if not (0.0 <= float(self.setpoint_lead_s) <= 0.5):
@@ -2080,10 +2082,12 @@ class LiveFleetSession:
             displacement = float(np.linalg.norm(np.asarray(position)[:2] - slot.bridge.start_enu[:2]))
             slot.max_horizontal_displacement_m = max(slot.max_horizontal_displacement_m, displacement)
         if self.cfg.record_dt_s > 0.0 and position is not None:
-            if not slot.flight_samples or now_s - slot.flight_samples[-1]["t_s"] >= self.cfg.record_dt_s - 1e-9:
+            mode = "ctbr" if rates is not None else "pva"
+            if (not slot.flight_samples or slot.flight_samples[-1]["control"] != mode
+                    or now_s - slot.flight_samples[-1]["t_s"] >= self.cfg.record_dt_s - 1e-9):
                 row = {"t_s": float(now_s), "phase": slot.phase,
                     "p": _vec_list(position), "v": None if slot.velocity is None else _vec_list(slot.velocity),
-                    "yaw": float(slot.yaw), "control": "ctbr" if rates is not None else "pva",
+                    "yaw": float(slot.yaw), "control": mode,
                     "ref": None if setpoint is None else _vec_list(px4.ned_to_enu(setpoint["position"])),
                     "rates": rates,
                     "body_up": None if state is None else _vec_list(state["rotation_enu_flu"][:, 2]),

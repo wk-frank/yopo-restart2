@@ -1176,6 +1176,9 @@ class ExploreFleet:
             self._count(did, "NO_DEPTH")
             return None
         frame, p_meas, _v_meas, _a_meas, yaw = sense
+        if self.depth_only and self.strict_unknown and not self._obs_field.has_current_evidence:
+            self._count(did, "NO_DEPTH")
+            return None
         head = self._head_state(did, now)
         peers = list(self._peer_heard_tubes[did].values())
         if self.cohesion_span_m > 0.0:

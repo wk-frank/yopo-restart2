@@ -120,7 +120,9 @@ def decode_gz_depth(msg, camera: CameraConfig) -> DepthFrame:
     if step < row_bytes or len(msg.data) != step * camera.height:
         raise ValueError("Malformed Gazebo depth stride/data")
     depth = np.ndarray(from_size, dtype="<f4", buffer=msg.data, strides=(step, 4)).copy()
-    depth[(depth <= 0) | ~np.isfinite(depth)] = np.nan
+    depth[depth <= 0] = np.nan
+    if not camera.strict_unknown:
+        depth[np.isposinf(depth)] = np.nan
     return DepthFrame(image_stamp(msg), depth, camera.intrinsics)
 
 

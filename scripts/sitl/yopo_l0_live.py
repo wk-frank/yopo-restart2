@@ -282,7 +282,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=_env_float("YOPO_EXPLORE_VELOCITY_MPS"),
         help="在内存里盖过 explore 场景卡 task.velocity_mps（时间相似比 ratio = velocity_mps / 6.0，缺省按场景卡）",
     )
-    return ap.parse_args(argv)
+    args = ap.parse_args(argv)
+    if args.ctbr_shadow:
+        if args.control_mode != "pva" or args.policy != "explore":
+            ap.error("--ctbr-shadow requires --control-mode pva and --policy explore")
+        if args.record_dt == 0.0:
+            args.record_dt = 0.02
+    return args
 
 
 def _env_float(name: str) -> float | None:

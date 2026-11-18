@@ -149,7 +149,7 @@
 | m4-ros2-matrix-runs.json | m4 | M4-ROS2：formation-6-open 六档 × seeds 0–4 的 ROS 2 矩阵 | report-only、冻结 |
 | m4-ros2-matrix.md | m4 | 票 M4-ROS2：formation-6-open 六档 ROS 2 矩阵（只报数） | report-only、冻结 |
 | m5-a1-closeout-audit.md | m5 | M5-A1：口径 A 第一期收口前置核验 | report-only |
-| orin-nano-3uav-d435.md |  | restart-yopo 三机 Orin Nano 8GB 与 D435 实机部署方案 | report-only、冻结 |
+| orin-nano-3uav-d435.md |  | restart-yopo 三机 Orin Nano 8GB 与 D435 实机部署方案 | report-only |
 | p1-inference-speed.md | p1 | P1：YOPO 单次推理耗时 | 冻结 |
 | p1b-sensor-speed.md | p1b | P1b：深度相机求交加速（默认关） | report-only、冻结 |
 | ros2-rflysim-humble.md |  | 票 S-RFLYSIM：RflySim-20.04（Ubuntu 22.04 Humble）ROS 2 锁步桥接、status 动态仓库与 L1 边界核查 | report-only |

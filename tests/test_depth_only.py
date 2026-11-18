@@ -35,12 +35,14 @@ def test_tri_state_mask_rejects_nan_blind_spot_and_bounds_swept_radius():
     depth = np.full((96, 160), np.inf, dtype=np.float32)
     # Center patch has a stereo hole / <MinZ blind spot (NaN).
     depth[40:56, 70:90] = np.nan
+    depth[32:40, 70:90] = 22.0  # A finite value beyond the calibrated range is unknown.
     # Left sector has a real obstacle at 6.0 m.
     depth[40:56, 20:40] = 6.0
     field.observe(DepthFrame(0.0, depth, (80.0, 80.0, 80.0, 48.0)), np.zeros(3), np.eye(3))
 
     # Optical axis ray hits the NaN blind spot -> must be rejected as unknown (0.0), not far-clip free!
     assert field.min_distance([[3.0, 0.0, 0.0]]) == 0.0
+    assert field.min_distance([[3.0, 0.0, 0.45]]) == 0.0
     # Right sector has verified +inf -> admitted as known free space.
     assert field.min_distance([[3.0, -1.5, 0.0]]) > 2.0
     # Lateral point at 0.8 m outside frustum is outside swept_radius_m=0.35 -> rejected!

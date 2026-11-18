@@ -31,6 +31,7 @@ class CameraConfig:
     max_range_m: float = 20.0
     noise_std_m: float = 0.0
     mount_xyz_body: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    strict_unknown: bool = False
 
     @classmethod
     def from_card(cls, d: dict) -> "CameraConfig":

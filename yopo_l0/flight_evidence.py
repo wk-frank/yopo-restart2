@@ -43,6 +43,33 @@ class FlightTruthMeter:
                 'collision_samples':self.collisions}
 
 
+def _has_ctbr_displacement(samples, target_m):
+    """Compare both horizontal displacements within one continuous authority segment."""
+    # Historical dense-forest evidence sampled at 0.20 s. Allow up to 0.05 s of jitter.
+    max_gap_s = 0.25
+    first = None
+    previous_time = -math.inf
+    reached = False
+    for sample in samples:
+        if sample.get('control') != 'ctbr':
+            first = None
+            continue
+        try:
+            stamp = float(sample['t_s'])
+            pair = np.asarray([sample['p'], sample['truth_p']], dtype=float)
+        except (KeyError, TypeError, ValueError):
+            return False
+        if (pair.shape != (2, 3) or not np.isfinite(pair).all()
+                or not math.isfinite(stamp) or stamp <= previous_time):
+            return False
+        if first is None or stamp - previous_time > max_gap_s + 1e-9:
+            first = pair[:, :2]
+        elif not reached:
+            reached = bool(np.all(np.linalg.norm(pair[:, :2] - first, axis=1) >= target_m))
+        previous_time = stamp
+    return reached
+
+
 def acceptance(result, card):
     """Fail closed if any requested evidence is missing; distance is per vehicle."""
     target=float(card.card.get('criteria',{}).get('min_horizontal_displacement_m',900.))
@@ -53,18 +80,12 @@ def acceptance(result, card):
     arrived_key='six_arrived' if n_expected==6 else 'all_arrived'
     depth_streams_key='six_native_depth_streams_consumed' if n_expected==6 else 'all_native_depth_streams_consumed'
     expected_ns={''} if n_expected==1 else {f'px4_{i+1}' for i in range(n_expected)}
-    def ctbr_distance(did):
-        start=np.asarray(next(d['start_enu'] for d in card.card['drones'] if d['id']==did),dtype=float)
-        return any(s.get('control')=='ctbr' and s.get('truth_p') is not None
-                   and np.linalg.norm(np.asarray(s['p'])[:2]-start[:2])>=target
-                   and np.linalg.norm(np.asarray(s['truth_p'])[:2]-start[:2])>=target
-                   for s in records.get(did,{}).get('samples',[]))
     checks={
         'px4_sitl_success':result.get('ok') is True and result.get('adapter')=='px4-ros' and result.get('fake_px4') is False,
         arrived_key:(n_expected>0 and result.get('arrived')==n_expected
                      and set(ids).issubset(records) and set(ids).issubset(truth.get('max_horizontal_displacement_m',{}))),
         'ctbr_used_by_every_vehicle':result.get('control_mode')=='ctbr' and all(records.get(k,{}).get('ctbr_ticks',0)>0 for k in ids),
-        'per_vehicle_ctbr_distance':all(ctbr_distance(k) for k in ids),
+        'per_vehicle_ctbr_distance':all(_has_ctbr_displacement(records.get(k, {}).get('samples', []), target) for k in ids),
         'no_px4_parameter_writes':result.get('px4_parameters_written')==[],
         'all_world_obstacles_present':result.get('scene_world',{}).get('n_cylinders')==len(card.card['geometry']['cylinders']),
         'per_vehicle_odometry_900m':all(records.get(k,{}).get('max_horizontal_displacement_m',0.)>=target for k in ids),

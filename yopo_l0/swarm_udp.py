@@ -169,6 +169,16 @@ def _tube_from_traj(traj: PiecewisePolynomial) -> np.ndarray:
     return np.column_stack((times, pts))
 
 
+@dataclass(frozen=True)
+class PeerObservation:
+    """Measured peer position in the shared frame at stamp_s (not a planned position)."""
+
+    session_id: int
+    coord_version: int
+    stamp_s: float
+    position: tuple[float, float, float]
+
+
 class DualTrackPeerTable:
     """Maintain Dual-Track Occupancy Union and asymmetric link-loss inflation for peers."""
 
@@ -186,6 +196,9 @@ class DualTrackPeerTable:
     ) -> None:
         self.self_id = str(self_id)
         self.members = tuple(str(m) for m in members if str(m) != self.self_id)
+        if (not math.isfinite(stale_after_s) or stale_after_s <= 0.
+                or not math.isfinite(max_clock_skew_s) or max_clock_skew_s < 0.):
+            raise ValueError("invalid peer freshness or clock skew bound")
         self.coord_version = int(coord_version)
         self.delay_union_s = float(delay_union_s)
         self.stale_after_s = float(stale_after_s)
@@ -195,6 +208,7 @@ class DualTrackPeerTable:
         self.sessions: dict[str, int] = {}
         self.last_seq: dict[str, int] = {}
         self.last_rx_s: dict[str, float] = {}
+        self.expires: dict[str, float] = {}
         self.current_tube: dict[str, np.ndarray] = {}
         self.previous_tube: dict[str, tuple[float, np.ndarray]] = {}
         self.terminal_goals: dict[str, np.ndarray] = {}
@@ -218,7 +232,8 @@ class DualTrackPeerTable:
             return self._reject("UNKNOWN_OWNER")
         if pkt.coord_version != self.coord_version:
             return self._reject("COORD_VERSION_MISMATCH")
-        if pkt.t_gen > now_f + self.max_clock_skew_s or pkt.t_expire <= now_f:
+        if (not all(map(math.isfinite, (now_f, pkt.t_gen, pkt.t_start, pkt.t_expire)))
+                or pkt.t_gen > now_f + self.max_clock_skew_s or pkt.t_expire <= max(now_f, pkt.t_start)):
             return self._reject("BAD_TIMESTAMP_OR_EXPIRED")
         known_session = self.sessions.get(pkt.owner)
         if known_session is not None and pkt.session_id != known_session:
@@ -230,12 +245,20 @@ class DualTrackPeerTable:
         prev_seq = self.last_seq.get(pkt.owner, -1)
         if pkt.seq <= prev_seq:
             return self._reject("STALE_OR_OUT_OF_ORDER_SEQ")
+        if (any(not np.isfinite(seg.coeffs).all() or not math.isfinite(seg.duration) or seg.duration <= 0
+                for seg in pkt.traj.segments)
+                or (pkt.terminal_goal is not None and not np.isfinite(pkt.terminal_goal).all())):
+            return self._reject("MALFORMED_TRAJECTORY")
+        tube = _tube_from_traj(pkt.traj)
+        if not np.isfinite(tube).all():
+            return self._reject("MALFORMED_TRAJECTORY")
         if pkt.owner in self.current_tube:
             self.previous_tube[pkt.owner] = (now_f, self.current_tube[pkt.owner])
         self.sessions[pkt.owner] = pkt.session_id
         self.last_seq[pkt.owner] = pkt.seq
         self.last_rx_s[pkt.owner] = now_f
-        self.current_tube[pkt.owner] = _tube_from_traj(pkt.traj)
+        self.expires[pkt.owner] = min(pkt.t_expire, pkt.t_gen + self.stale_after_s + self.max_clock_skew_s)
+        self.current_tube[pkt.owner] = tube
         if pkt.terminal_goal is not None:
             self.terminal_goals[pkt.owner] = np.asarray(pkt.terminal_goal, dtype=np.float64)
         return True
@@ -244,6 +267,11 @@ class DualTrackPeerTable:
         self.quarantined_restarts.discard(owner)
         self.sessions[owner] = int(new_session_id)
         self.last_seq[owner] = -1
+        self.current_tube.pop(owner, None)
+        self.previous_tube.pop(owner, None)
+        self.terminal_goals.pop(owner, None)
+        self.last_rx_s.pop(owner, None)
+        self.expires.pop(owner, None)
 
     def active_tubes_for_peer(self, owner: str, now_s: float) -> list[np.ndarray]:
         tubes: list[np.ndarray] = []
@@ -272,16 +300,52 @@ class DualTrackPeerTable:
         pts: np.ndarray,
         now_s: float,
         base_peer_sep_m: float,
+        *,
+        observations: dict[str, PeerObservation] | None = None,
+        peer_speed_bound_mps: float | None = None,
     ) -> tuple[bool, float]:
-        """Check candidate against Dual-Track Occupancy Union + age-inflated separation."""
+        """Approve only a measured, bounded horizon, including an unreceived change of plan.
+
+        base_peer_sep_m includes body, localization, tracking and chord error allowances.
+        The speed bound applies to actual peer motion, including its fallback, for this horizon.
+        """
+        times = np.asarray(times, dtype=float)
+        pts = np.asarray(pts, dtype=float)
+        if (observations is None or peer_speed_bound_mps is None
+                or not math.isfinite(peer_speed_bound_mps) or peer_speed_bound_mps <= 0
+                or not math.isfinite(base_peer_sep_m) or base_peer_sep_m <= 0
+                or not math.isfinite(now_s) or times.ndim != 1 or len(times) < 2
+                or pts.shape != (len(times), 3) or not np.isfinite(pts).all()
+                or not np.isfinite(times).all() or abs(times[0] - now_s) > 1e-9
+                or np.any(np.diff(times) <= 0)):
+            return False, -math.inf
+        delta = np.diff(pts, axis=0)
+        length2 = np.einsum("ij,ij->i", delta, delta)
         min_margin = math.inf
         for peer in self.members:
             tubes = self.active_tubes_for_peer(peer, now_s)
-            if not tubes:
-                continue
+            obs = observations.get(peer)
+            if (not tubes or peer in self.quarantined_restarts or now_s >= self.expires[peer]
+                    or obs is None or obs.coord_version != self.coord_version
+                    or obs.session_id != self.sessions[peer] or not math.isfinite(obs.stamp_s)
+                    or obs.stamp_s > now_s + self.max_clock_skew_s
+                    or now_s - obs.stamp_s > self.stale_after_s):
+                return False, -math.inf
+            anchor = np.asarray(obs.position, dtype=float)
+            if anchor.shape != (3,) or not np.isfinite(anchor).all():
+                return False, -math.inf
+            # Bound every chord by the peer's reachable ball at the end of the interval.
+            dot = np.einsum("ij,ij->i", anchor - pts[:-1], delta)
+            frac = np.divide(dot, length2, out=np.zeros_like(dot), where=length2 > 0)
+            closest = pts[:-1] + np.clip(frac, 0., 1.)[:, None] * delta
+            radius = peer_speed_bound_mps * np.maximum(0., times[1:] - obs.stamp_s + self.max_clock_skew_s)
+            margin = float(np.min(np.linalg.norm(closest - anchor, axis=1) - radius - base_peer_sep_m))
+            if margin <= 0:
+                return False, margin
+            min_margin = min(min_margin, margin)
             d = _peer_tube_min_distance(times, pts, tubes)
             req = float(base_peer_sep_m) + self.inflation_for_peer(peer, now_s)
             min_margin = min(min_margin, d - req)
-            if d + 1e-9 < req:
-                return False, d
+            if d <= req:
+                return False, d - req
         return True, min_margin

@@ -26,6 +26,7 @@ class DepthLocalField:
             if cam_rotation is None
             else np.asarray(cam_rotation, dtype=float).reshape(3, 3)
         )
+        self.has_current_evidence = False
         self.frames = []
         self.tree = None
         self.stamp = None
@@ -46,7 +47,9 @@ class DepthLocalField:
         # Camera +X forward, +Y left, +Z up; pixels right/down.
         rays = np.stack([np.ones_like(u), -(u - cx) / fx, -(v - cy) / fy], axis=-1)
         points = (rays[valid] * d[valid, None]) @ R_wc.T + origin
-        self.frames.append((frame.stamp, origin, R_wc, frame.K, d))
+        self.has_current_evidence = bool(valid.any() or np.isposinf(d).any())
+        swept_center = p.copy() if self.strict_unknown else origin
+        self.frames.append((frame.stamp, origin, R_wc, frame.K, d, swept_center))
         self.frames = [f for f in self.frames if frame.stamp - f[0] < 2.0][-8:]
         self.surfaces.append(points)
         self.surfaces = self.surfaces[-8:]
@@ -63,10 +66,10 @@ class DepthLocalField:
 
     def min_distance(self, pts):
         pts = np.asarray(pts).reshape(-1, 3)
-        if not self.frames:
+        if not self.frames or (self.strict_unknown and not self.has_current_evidence):
             return 0.0
         known = np.zeros(len(pts), dtype=bool)
-        for _, origin, R_wc, K, depth in self.frames:
+        for _, origin, R_wc, K, depth, swept_center in self.frames:
             local = (pts - origin) @ R_wc
             x = local[:, 0]
             fx, fy, cx, cy = K
@@ -87,12 +90,14 @@ class DepthLocalField:
                     # Tri-state mask: +inf is verified far-clip free space; NaN is unknown void.
                     far_free = np.isposinf(measured)
                     in_front = np.isfinite(measured) & (x[ids] < measured - 0.6)
+                    if self.strict_unknown:
+                        in_front &= measured < self.max_range
                     known[ids] |= far_free | in_front
                 else:
                     # Legacy Gazebo renderer mode where NaN denotes no-return beyond far clip.
                     known[ids] |= (~np.isfinite(measured)) | (x[ids] < measured - 0.6)
             # Immediate swept neighbourhood bounded by verified body/sweep radius.
-            known |= np.linalg.norm(pts - origin, axis=1) < self.swept_radius_m
+            known |= np.linalg.norm(pts - swept_center, axis=1) < self.swept_radius_m
         if not known.all():
             return 0.0
         return float(self.tree.query(pts, workers=1)[0].min()) if self.tree is not None else self.max_range

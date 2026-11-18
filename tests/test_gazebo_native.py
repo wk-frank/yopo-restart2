@@ -1,4 +1,5 @@
 """Native depth contract: units/stride, strict sensor input, and disposable SDF changes."""
+from dataclasses import replace
 from types import SimpleNamespace as NS
 import xml.etree.ElementTree as ET
 
@@ -17,6 +18,8 @@ def test_gazebo_depth_metres_stride_stamp_and_invalid_format():
     frame = decode_gz_depth(msg, cfg)
     assert frame.stamp == 17.25 and frame.depth[0, 0] == 1.25 and frame.depth[1, 0] == 2.75
     assert np.isnan(frame.depth[:, 1]).all()
+    strict = decode_gz_depth(msg, replace(cfg, strict_unknown=True))
+    assert np.isposinf(strict.depth[0, 1]) and np.isnan(strict.depth[1, 1])
     msg.pixel_format_type = 3
     with pytest.raises(ValueError, match='pixel format'):
         decode_gz_depth(msg, cfg)

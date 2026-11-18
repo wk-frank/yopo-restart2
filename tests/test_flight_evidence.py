@@ -13,17 +13,21 @@ def _success_fixture():
             'truth_flight':{'max_horizontal_displacement_m':{k:940. for k in ids},
                 'collision_samples':0,'samples':{k:100 for k in ids},'missing_plan_samples':{k:0 for k in ids}}}
     for d in card.card['drones']:
-        point=[940.,d['start_enu'][1],2.5]
-        result['flight_record'][d['id']]['samples']=[{'control':'ctbr','p':point,'truth_p':point}]
+        start = np.array(d['start_enu'])
+        end = np.array([940., start[1], 2.5])
+        points = np.linspace(start, end, 1601).tolist()
+        result['flight_record'][d['id']]['samples'] = [
+            {'t_s': 10. + i * 0.2, 'control': 'ctbr', 'p': p, 'truth_p': p}
+            for i, p in enumerate(points)]
     return card,result
 
 
 def test_acceptance_requires_every_vehicle_and_both_measured_distance_sources():
     card,result=_success_fixture()
     assert acceptance(result,card)['passed']
-    result['flight_record']['uav5']['samples'][0]['control']='pva'
+    result['flight_record']['uav5']['samples'][800]['control']='pva'
     assert not acceptance(result,card)['passed']
-    result['flight_record']['uav5']['samples'][0]['control']='ctbr'
+    result['flight_record']['uav5']['samples'][800]['control']='ctbr'
     result['truth_flight']['max_horizontal_displacement_m']['uav5']=899.9
     assert not acceptance(result,card)['passed']
     result['truth_flight']['max_horizontal_displacement_m']['uav5']=940.

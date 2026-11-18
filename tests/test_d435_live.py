@@ -34,7 +34,9 @@ def test_stopping_distance_gate_matches_worked_example():
     assert not gate.allow_speed(3.0, reliable_clearance_m=3.00, measured_brake_m=2.25)
     assert gate.allow_speed(3.0, reliable_clearance_m=3.45, measured_brake_m=2.25)
     v_safe = gate.max_safe_speed_mps(3.00)
-    assert 2.5 < v_safe < 3.0
+    assert v_safe == pytest.approx(2.747950130825634)
+    assert gate.allow_speed(2.74, reliable_clearance_m=3.00)
+    assert not gate.allow_speed(2.75, reliable_clearance_m=3.00)
     assert gate.allow_speed(v_safe, reliable_clearance_m=3.00)
 
 

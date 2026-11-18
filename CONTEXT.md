@@ -30,6 +30,7 @@ _Avoid_: Rigid formation with obstacle avoidance
 
 **Dual-Track Occupancy Union（双轨占用并集）**:
 The spatial union of a neighbor's previous committed trajectory (including its braking tail and terminal hold) and its newly received trajectory during the wireless propagation uncertainty window $\delta_{\text{net}}$.
+A shared-space commitment also requires a fresh measured position for each peer and separation from its physically reachable set through the braking tail, including an unheard replan.
 _Avoid_: Synchronous ACK barrier, narrow-corridor mutex
 
 ### Control Handover

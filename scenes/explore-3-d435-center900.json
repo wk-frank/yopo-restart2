@@ -72,6 +72,7 @@
     "min_obstacle_count": 60500
   },
   "camera": {
+    "strict_unknown": true,
     "width": 160,
     "height": 96,
     "hfov_deg": 90.0,
