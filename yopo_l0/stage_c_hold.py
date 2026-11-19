@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 
+from .board_receiver import SimFlightController
 from .board_runtime import BoardConfig, JsonlLog
 
 
@@ -21,47 +22,6 @@ def _loopback_socket(stack: ExitStack) -> socket.socket:
     link = stack.enter_context(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
     link.bind(("127.0.0.1", 0))
     return link
-
-
-class SimFlightController:
-    """Receive and timestamp board commands at the simulated flight-control endpoint."""
-
-    def __init__(self, config: BoardConfig, receiver: socket.socket, log: JsonlLog,
-                 reject_log: JsonlLog) -> None:
-        self.config = config
-        self.receiver = receiver
-        self.log = log
-        self.reject_log = reject_log
-
-    def receive(self) -> dict | None:
-        config = self.config
-        raw, sender = self.receiver.recvfrom(4096)
-        received_ns = time.monotonic_ns()
-        try:
-            message = json.loads(raw)
-            if (not isinstance(message, dict) or sender != config.bind
-                    or message.get("board_id") != config.board_id
-                    or message.get("input_id") != config.input_id
-                    or message.get("flight_controller_id") != config.flight_controller_id
-                    or message.get("type") != "command"):
-                raise ValueError("endpoint or identity mismatch")
-            sent_ns = message["sent_ns"]
-            valid_until_ns = message["valid_until_ns"]
-            if (type(sent_ns) is not int or type(valid_until_ns) is not int
-                    or not 0 <= sent_ns <= received_ns < valid_until_ns):
-                raise ValueError("invalid or expired command")
-            if not isinstance(message["command"], dict):
-                raise ValueError("malformed command")
-        except (KeyError, ValueError) as error:
-            self.reject_log(
-                "command_rejected", received_ns=received_ns, sender=sender,
-                reason=str(error), wire_hex=raw.hex(),
-            )
-            return None
-        record = {**message, "received_ns": received_ns, "sender": sender,
-                  "receiver": config.flight_controller_endpoint}
-        self.log("command_received", **record)
-        return record
 
 
 class HoldBench:
@@ -73,6 +33,7 @@ class HoldBench:
         self.received: dict[str, list[dict]] = {}
         self.boards = ("uav1", "uav2", "uav3")
         self.configs: dict[str, BoardConfig] = {}
+        self.flight_controllers: dict[str, SimFlightController] = {}
         with ExitStack() as reservations:
             binds = {name: _loopback_socket(reservations).getsockname() for name in self.boards}
             for i, name in enumerate(self.boards):
@@ -103,9 +64,13 @@ class HoldBench:
         rejected_log = self.stack.enter_context(
             (directory / "flight_controller_rejected.jsonl").open("x", encoding="utf-8"),
         )
-        flight_controller = SimFlightController(
-            config, receiver, JsonlLog(accepted_log), JsonlLog(rejected_log),
+        authority_log = self.stack.enter_context(
+            (directory / "flight_controller_authority.jsonl").open("x", encoding="utf-8"),
         )
+        flight_controller = SimFlightController(
+            config, receiver, JsonlLog(accepted_log), JsonlLog(rejected_log), JsonlLog(authority_log),
+        )
+        self.flight_controllers[name] = flight_controller
         self.selector.register(receiver, selectors.EVENT_READ, flight_controller)
 
     def start(self, board: str, *, extra_args: tuple[str, ...] = ()) -> None:
@@ -139,6 +104,8 @@ class HoldBench:
             record = receiver.receive()
             if record is not None:
                 self.received[receiver.config.board_id].append(record)
+        for receiver in self.flight_controllers.values():
+            receiver.expire()
 
     def until(self, predicate, *, deadline_s=5.0) -> None:
         deadline = time.monotonic() + deadline_s
