@@ -210,7 +210,7 @@ class SoftwareBoard:
         start_ns = monotonic_ns()
         frame = self.frame
         try:
-            best = int(np.argmin(result.score[0]))
+            best = int(np.argmax(result.score[0]))
             _, tail, _ = decode_params(result.traj_params[0], UPSTREAM_DECODER)
             velocity = frame.pose.rotation_enu_flu @ tail[best, 1]
             speed = float(np.linalg.norm(velocity))
@@ -258,6 +258,7 @@ class SoftwareBoard:
                 self.checked_fault = None
                 self.log("forward_plan", frame_id=frame.frame_id, request_id=result.request_id,
                          exposure_ns=round(frame.exposure_s * NS), target_speed_mps=speed,
+                         candidate_index=best, candidate_score=float(result.score[0, best]),
                          valid_until_ns=plan.valid_until_ns, brake_valid_from_ns=now_ns,
                          brake_start_ns=brake_start_ns,
                          brake_valid_until_ns=plan.verified_brake.valid_until_ns)

@@ -125,3 +125,23 @@ def test_brackets_and_pose_resets_fail_closed_at_the_board_entry():
     assert not board.push_odometry(5.25, [1.5, 0., 2.], [0., 0., 0.], np.eye(3), coordinate_version=2)
     assert board.last_reason == "COORDINATE_VERSION_CHANGED"
     assert board.tracking_state(5.25) is None
+
+
+def test_uncertain_exposure_cannot_clear_a_sweep_outside_a_possible_frustum():
+    depth = np.full((96, 160), 5., dtype=np.float32)
+
+    def decision(offset, error):
+        board = BoardPerception(
+            "cam", mount_xyz_body=(.18, 0, 0),
+            camera_clock=ClockMapping(offset_s=offset, error_s=error),
+        )
+        for t in (10.12, 10.175, 10.26, 10.38, 10.50, 10.57, 10.60):
+            assert board.push_odometry(t, [2.5 * (t - 10.60), 0, 2], [2.5, 0, 0], np.eye(3))
+            if t == 10.26:
+                assert board.observe(DepthExposure("cam", 1, 10.20, depth, K), now_s=t)
+        assert board.observe(DepthExposure("cam", 2, 10.536, depth, K), now_s=10.60)
+        return board.check_first_segment([[0, 0, 2], [.10, 0, 2]], now_s=10.60)
+
+    assert decision(0., 0.).allowed
+    assert not decision(.024, 0.).allowed
+    assert not decision(0., .025).allowed

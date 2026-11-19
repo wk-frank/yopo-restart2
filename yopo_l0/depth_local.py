@@ -36,8 +36,9 @@ class DepthLocalField:
         self.tree = None
         self.stamp = None
         self.surfaces = []
+        self.surface_errors = []
 
-    def observe(self, frame, position, rotation):
+    def observe(self, frame, position, rotation, *, translation_error_m=0.0, rotation_error_rad=0.0):
         if self.stamp is not None and abs(self.stamp - frame.stamp) < 1e-6:
             return
         self.stamp = frame.stamp
@@ -54,10 +55,19 @@ class DepthLocalField:
         points = (rays[valid] * d[valid, None]) @ R_wc.T + origin
         self.has_current_evidence = bool(valid.any() or np.isposinf(d).any())
         swept_center = p.copy() if self.strict_unknown else origin
-        self.frames.append((frame.stamp, origin, R_wc, frame.K, d, swept_center))
+        rotation_scale = 2.0 * np.sin(rotation_error_rad / 2.0)
+        self.frames.append((frame.stamp, origin, R_wc, frame.K, d, swept_center, p,
+                            translation_error_m, rotation_scale))
         self.frames = [f for f in self.frames if frame.stamp - f[0] < 2.0][-self.history_frames:]
         self.surfaces.append(points)
         self.surfaces = self.surfaces[-self.history_frames:]
+        surface_error = 0.0
+        if len(points):
+            surface_error = translation_error_m
+            if rotation_scale:
+                surface_error += rotation_scale * np.linalg.norm(points - p, axis=1).max()
+        self.surface_errors.append(surface_error)
+        self.surface_errors = self.surface_errors[-self.history_frames:]
         # Retain recently observed surfaces when they move behind the camera.
         cloud = np.concatenate(self.surfaces)
         if len(cloud):
@@ -74,7 +84,7 @@ class DepthLocalField:
         if self.tree is None:
             return np.zeros(len(centers), dtype=bool)
         distance = self.tree.query(centers, workers=1)[0]
-        return distance <= radii + np.sqrt(3.0) * _SURFACE_VOXEL_M
+        return distance <= radii + np.sqrt(3.0) * _SURFACE_VOXEL_M + max(self.surface_errors)
 
     def measured_sphere_coverage(
         self, centers: np.ndarray, radii: np.ndarray, *, min_range_m: float, since_s: float,
@@ -86,14 +96,18 @@ class DepthLocalField:
         The aircraft's previously occupied body neighbourhood does not enter this test.
         """
         evidence = np.full(len(centers), np.nan)
-        for stamp, origin, R_wc, K, depth, _ in reversed(self.frames):
+        for stamp, origin, R_wc, K, depth, _, body, translation, rotation_scale in reversed(self.frames):
             if stamp < since_s:
                 break
             unseen = np.flatnonzero(np.isnan(evidence))
             if unseen.size == 0:
                 break
             local = (centers[unseen] - origin) @ R_wc
-            radius = radii[unseen]
+            # Rotating the camera changes each sphere center in its coordinates.
+            # Relative to the body, the fixed mounting translation cancels out.
+            radius = radii[unseen] + translation
+            if rotation_scale:
+                radius = radius + rotation_scale * np.linalg.norm(centers[unseen] - body, axis=1)
             fx, fy, cx, cy = K
             x, y, z = local.T
             depth_ok = (x - radius > min_range_m) & (x + radius < self.max_range - 1.0)
@@ -117,7 +131,7 @@ class DepthLocalField:
         if not self.frames or (self.strict_unknown and not self.has_current_evidence):
             return 0.0
         known = np.zeros(len(pts), dtype=bool)
-        for _, origin, R_wc, K, depth, swept_center in self.frames:
+        for _, origin, R_wc, K, depth, swept_center, *_ in self.frames:
             local = (pts - origin) @ R_wc
             x = local[:, 0]
             fx, fy, cx, cy = K

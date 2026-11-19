@@ -254,6 +254,9 @@ class PeerGuard:
         return True
 
     def _invalid_update(self, update: PeerUpdate, now_s: float) -> str | None:
+        return self._invalid_observation(update, now_s) or self._invalid_plan(update, now_s)
+
+    def _invalid_observation(self, update: PeerUpdate, now_s: float) -> str | None:
         packet = update.packet
         skew = self.budget.clock_error_s
         pose = update.position_enu_m
@@ -264,6 +267,11 @@ class PeerGuard:
             return "PEER_CLOCK_ERROR"
         if now_s - min(update.measured_at_s, packet.t_gen) + skew >= self.budget.stale_after_s:
             return "PEER_STALE"
+        return None
+
+    def _invalid_plan(self, update: PeerUpdate, now_s: float) -> str | None:
+        packet = update.packet
+        skew = self.budget.clock_error_s
         traj = packet.traj
         if (not traj.is_well_formed() or traj.t_end - traj.t_start > self.budget.max_plan_window_s
                 or traj.t_start > packet.t_gen + skew or not _terminates_at_rest(traj)
@@ -274,7 +282,7 @@ class PeerGuard:
         if update.holding:
             hold_allowance = self.budget.localization_error_m + self.budget.tracking_error_m
             if any(np.any(seg.coeffs[:, 1:] != 0)
-                   or np.linalg.norm(seg.coeffs[:, 0] - pose) > hold_allowance
+                   or np.linalg.norm(seg.coeffs[:, 0] - update.position_enu_m) > hold_allowance
                    for seg in traj.segments):
                 return "INVALID_PEER_HOLD"
         return None
@@ -304,7 +312,11 @@ class PeerGuard:
                           measured_at_s=update.measured_at_s, position_enu_m=update.position_enu_m,
                           holding=update.holding)
             reason = ("PEER_IDENTITY_MISMATCH" if packet.owner != owner
-                      else self._invalid_update(update, now_s) or self._admit(owner, update, now_s))
+                      else self._invalid_observation(update, now_s))
+            if reason is None:
+                plan_reason = self._invalid_plan(update, now_s)
+                reason = self._admit(owner, update, now_s, plan_reason=plan_reason)
+                fields["plan_reason"] = plan_reason
             self._event("peer_rx_rejected" if reason else "peer_rx", **fields, reason=reason)
 
     @staticmethod
@@ -318,7 +330,9 @@ class PeerGuard:
             return "PEER_OBSERVATION_TIME_REGRESSION"
         return None
 
-    def _admit(self, owner: str, update: PeerUpdate, now_s: float) -> str | None:
+    def _admit(
+        self, owner: str, update: PeerUpdate, now_s: float, *, plan_reason: str | None,
+    ) -> str | None:
         state = self._tracks[owner]
         packet = update.packet
         same_coordinates = packet.coord_version == self.coord_version
@@ -332,8 +346,8 @@ class PeerGuard:
                 if reason := self._sequence_fault(update, pending):
                     return reason
             else:
-                latest = pending if pending is not None else current
-                if packet.t_gen < latest.packet.t_gen - self.budget.clock_error_s:
+                latest = pending or state.coordinate_fault or current
+                if packet.t_gen <= latest.packet.t_gen or update.measured_at_s < latest.measured_at_s:
                     return "PEER_OLD_SESSION"
             state.pending = update
             return "PEER_SESSION_RESTART" if same_coordinates else "PEER_COORD_VERSION_MISMATCH"
@@ -348,6 +362,8 @@ class PeerGuard:
             state.coordinate_fault = update
             return "PEER_COORD_VERSION_MISMATCH"
 
+        if plan_reason is not None:
+            return plan_reason
         state.coordinate_fault = None
         if current is not None and not _same_track(packet.traj, current.packet.traj):
             state.previous = current

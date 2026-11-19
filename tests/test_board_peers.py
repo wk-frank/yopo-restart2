@@ -216,3 +216,32 @@ def test_track_switch_retains_previous_occupancy_until_the_propagation_window_en
         first.poll(next_switch)
         assert first.check(candidate, now_s=t + .07, brake_start_s=t + .25).reason == "PEER_TRACK_CONFLICT"
         assert first.check(candidate, now_s=t + .10, brake_start_s=t + .25).allowed
+
+
+def test_fresh_restart_with_expired_plan_quarantines_old_session_at_receipt():
+    t = 100.0
+    def announce(guard, stamp, y, duration):
+        p = (0., y, 2.)
+        guard.broadcast(hold_traj(p, stamp, stamp + duration), now_s=stamp, measured_at_s=stamp,
+                        position_enu_m=p, holding=True)
+
+    with (
+        PeerGuard("uav0", 10, ("127.0.0.1", 0), {}) as first,
+        PeerGuard("uav2", 12, ("127.0.0.1", 0), {"uav0": first.endpoint}) as third,
+    ):
+        with PeerGuard("uav1", 11, ("127.0.0.1", 0), {"uav0": first.endpoint}) as old_peer:
+            source = old_peer.endpoint
+            first.set_endpoints({"uav1": source, "uav2": third.endpoint})
+            for guard, y in ((first, 0.), (old_peer, 10.), (third, -10.)):
+                announce(guard, t, y, 2.0)
+            first.poll(t)
+            assert first.availability(t).allowed
+        with PeerGuard("uav1", 22, source, {"uav0": first.endpoint}) as restarted:
+            announce(restarted, t + .02, 10., .02)
+            first.poll(t + .06)
+            assert first.availability(t + .06).reason == "PEER_SESSION_RESTART"
+            assert not first.verify_rejoin("uav1", 22, now_s=t + .06)
+            announce(restarted, t + .07, 10., .75)
+            first.poll(t + .08)
+            assert first.verify_rejoin("uav1", 22, now_s=t + .08)
+            assert first.availability(t + .08).allowed

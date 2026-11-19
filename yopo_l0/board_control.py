@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 import math
-from threading import Lock
+from threading import Lock, get_ident
 import time
 from typing import TYPE_CHECKING
 
@@ -96,9 +96,9 @@ class PlanTicket:
 class BoardControl:
     """Run control independently of planner or inference work.
 
-    Mode, odometry and invalidation decisions belong to the control loop.
-    Planner threads may only request a ticket and offer its result. Neither
-    planning work nor reference sampling runs under the shared mailbox lock.
+    Construct on the control thread, which owns mode, odometry and invalidation
+    decisions through output publication. Worker threads use the plan mailbox.
+    Planning and reference sampling run outside that mailbox lock.
     """
 
     def __init__(self, *, log: JsonlLog, max_odometry_age_ns: int = 120_000_000):
@@ -107,6 +107,7 @@ class BoardControl:
         self.log = log
         self.max_odometry_age_ns = max_odometry_age_ns
         self._lock = Lock()
+        self._control_thread = get_ident()
         self._ticket: PlanTicket | None = None
         self._sequence = 0
         self._generation = 0
@@ -121,7 +122,12 @@ class BoardControl:
         self._last_ctbr_ns: int | None = None
         self._ctbr = FlatnessCTBRController()
 
+    def _require_control_thread(self) -> None:
+        if get_ident() != self._control_thread:
+            raise RuntimeError("control authority changes require the owning control thread")
+
     def request_mode(self, mode: str, *, shadow: bool = False, terminal: bool = False) -> bool:
+        self._require_control_thread()
         if mode not in ("PVA", "CTBR", "MANUAL") or ((shadow or terminal) and mode != "PVA"):
             raise ValueError("invalid control mode request")
         if self._terminal and mode == "CTBR":
@@ -150,6 +156,7 @@ class BoardControl:
         self._reason = reason
 
     def invalidate(self, reason: str, *, preserve_brake: bool = True) -> None:
+        self._require_control_thread()
         with self._lock:
             self._invalidate_locked(reason, preserve_brake=preserve_brake)
             generation = self._generation
@@ -175,8 +182,8 @@ class BoardControl:
             elif self._ticket is not ticket or self._requested == "MANUAL":
                 reason = "PLAN_RESULT_SUPERSEDED"
             elif self._plan is not None and now_ns >= self._plan.valid_until_ns:
-                self._invalidate_locked("PLAN_EXPIRED", preserve_brake=True)
-                reason = "PLAN_EXPIRED"
+                self._ticket = None
+                reason = "PLAN_EXPIRED"  # The control tick owns expiry and brake handover.
             elif (self._brake is not None and
                   self._brake.valid_from_ns <= now_ns < self._brake.valid_until_ns):
                 reason = "VERIFIED_BRAKE_ACTIVE"
@@ -212,6 +219,7 @@ class BoardControl:
     def step(self, tick: ControlTick, odometry: Odometry | None) -> ControlOutput:
         from .board_runtime import ControlOutput
 
+        self._require_control_thread()
         now_ns = tick.now_ns
         evidence = None
         with self._lock:

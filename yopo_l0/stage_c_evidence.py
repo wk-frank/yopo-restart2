@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from bisect import bisect_right
 import json
 import math
 from pathlib import Path
@@ -63,6 +64,11 @@ def ctbr_distance(commands: list[dict], authority: list[dict], truth: list[dict]
             if isinstance(key[0], str) and _stamp(key[1]) and _stamp(key[2]):
                 ended[key] = min(ended.get(key, row["invalidated_ns"]), row["invalidated_ns"])
 
+    interruptions = sorted(
+        row["received_ns"] for row in authority
+        if row.get("board_id") == board_id and row.get("event") == "authority_changed"
+        and row.get("authority") in ("PVA", "NONE", "MANUAL") and _stamp(row.get("received_ns"))
+    )
     anchor = None
     previous_ctbr = None
     interval_start = None
@@ -89,12 +95,14 @@ def ctbr_distance(commands: list[dict], authority: list[dict], truth: list[dict]
         if deadline <= recv:
             previous_ctbr = anchor = last_pose_stamp = None
             continue
-        consecutive = (previous_ctbr is not None and key[:2] == previous_ctbr[0]
-                       and recv <= previous_ctbr[2] and recv - previous_ctbr[1] <= MAX_EVIDENCE_GAP_NS)
+        interruptions_seen = bisect_right(interruptions, recv)
+        consecutive = (previous_ctbr is not None and key[0] == previous_ctbr[0]
+                       and recv <= previous_ctbr[2] and recv - previous_ctbr[1] <= MAX_EVIDENCE_GAP_NS
+                       and interruptions_seen == previous_ctbr[3])
         if not consecutive:
             interval_start = recv
             anchor = last_pose_stamp = None
-        previous_ctbr = (key[:2], recv, deadline)
+        previous_ctbr = (key[0], recv, deadline, interruptions_seen)
 
         stamp = row.get("position_stamp_ns")
         if _stamp(stamp) and stamp < interval_start:

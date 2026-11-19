@@ -85,3 +85,49 @@ def test_expired_or_invalidated_plans_cannot_retake_authority(tmp_path):
     assert command_timeout["invalidated_ns"] == command_timeout["prior_valid_until_ns"]
     assert command_timeout["invalidated_ns"] < overrun["received_ns"]
     assert not any(row["received_ns"] > overrun["received_ns"] for row in receiver)
+
+
+def test_planner_cannot_invalidate_an_in_progress_control_output():
+    import io
+    from threading import Event, Thread
+    from time import monotonic_ns
+
+    from yopo_l0.board_control import BoardControl, ControlPlan, ControlReference, Odometry
+    from yopo_l0.board_runtime import BoardConfig, ControlTick, JsonlLog
+
+    output_log = JsonlLog(io.StringIO())
+    gate = BoardControl(log=output_log)
+    gate.request_mode("CTBR")
+    position = (0., 0., 2.)
+    sample_started, release_sample = Event(), Event()
+    errors = []
+
+    def sample(_stamp):
+        sample_started.set()
+        assert release_sample.wait(1)
+        return ControlReference(position, (0.3, 0., 0.))
+
+    def worker():
+        assert sample_started.wait(1)
+        try:
+            gate.invalidate("ALL_BLIND")
+        except RuntimeError as error:
+            errors.append(str(error))
+        finally:
+            release_sample.set()
+
+    thread = Thread(target=worker, daemon=True)
+    thread.start()
+    now = monotonic_ns()
+    ticket = gate.begin_plan(now + 200_000_000)
+    assert gate.offer_plan(ticket, ControlPlan(sample, now + 200_000_000))
+    config = BoardConfig("uav1", "odom", "fc", ("127.0.0.1", 0),
+                         ("127.0.0.1", 1), {}, position)
+    tick = ControlTick(config, "test-session", 1, now, now, {})
+    output = gate.step(tick, Odometry(now, position))
+    thread.join(1)
+    assert errors == ["control authority changes require the owning control thread"]
+    assert output.authority == "CTBR" and output.disposition == "tracking"
+    gate.invalidate("ALL_BLIND")
+    revoked = gate.step(tick, Odometry(now, position))
+    assert revoked.authority == "NONE" and revoked.disposition == "relinquished"

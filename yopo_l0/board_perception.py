@@ -87,6 +87,32 @@ def _pose_evidence(pose: InterpolatedState) -> dict:
                 rotation_enu_flu=pose.rotation_enu_flu.tolist())
 
 
+def _exposure_pose_bounds(
+    pose: InterpolatedState, before: InterpolatedState, after: InterpolatedState, error_s: float,
+) -> tuple[float, float] | None:
+    """Bound translation and rotation over the possible clock-mapped exposure interval."""
+    if error_s == 0.0:
+        return 0.0, 0.0
+    span = after.stamp_s - before.stamp_s
+    translation = float(np.linalg.norm(after.position_enu - before.position_enu)) * error_s / span
+    relative = before.rotation_enu_flu.T @ after.rotation_enu_flu
+    cosine = float(np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0))
+    angle = math.acos(cosine)
+    if angle >= math.pi - 1e-6:
+        return None  # The polar interpolation is ambiguous at a half turn.
+    sine = math.sin(angle)
+    alpha = (pose.stamp_s - before.stamp_s) / span
+    extent = error_s / span
+
+    def polar_angle(fraction: float) -> float:
+        return math.atan2(fraction * sine, 1.0 - fraction + fraction * cosine)
+
+    # Along this arc the polar projection of the interpolated rotations is monotone.
+    nominal = polar_angle(alpha)
+    angular = max(nominal - polar_angle(alpha - extent), polar_angle(alpha + extent) - nominal)
+    return translation, angular
+
+
 class BoardPerception:
     def __init__(
         self,
@@ -243,6 +269,11 @@ class BoardPerception:
             self._reject(frame, "EXPOSURE_POSE_BRACKET_MISSING", exposure_s=exposure_s)
             return None
         pose, before, after = bracket
+        bounds = _exposure_pose_bounds(pose, before, after, error_s)
+        if bounds is None:
+            self._reject(frame, "AMBIGUOUS_EXPOSURE_ROTATION", exposure_s=exposure_s)
+            return None
+        translation_error_m, rotation_error_rad = bounds
 
         raw = np.asarray(frame.depth_m, dtype=np.float32)
         K = tuple(frame.intrinsics)
@@ -271,6 +302,7 @@ class BoardPerception:
             exposure_s=exposure_s, received_s=now_s, camera_clock=asdict(self.camera_clock),
             pose_before=_pose_evidence(before), pose_after=_pose_evidence(after),
             exposure_pose=_pose_evidence(pose), intrinsics=K, valid_col_span=frame.valid_col_span,
+            translation_error_m=translation_error_m, rotation_error_rad=rotation_error_rad,
             camera_origin_enu=(pose.position_enu + pose.rotation_enu_flu @ self.mount_xyz_body).tolist(),
             mount_xyz_body=self.mount_xyz_body.tolist(), camera_rotation=self.camera_rotation.tolist(),
             body_radius_m=self.body_radius_m, far_free_source=frame.far_free_source,
@@ -283,7 +315,10 @@ class BoardPerception:
             return None
         safety.setflags(write=False)
         network.setflags(write=False)
-        self._field.observe(DepthFrame(exposure_s, safety, K), pose.position_enu, pose.rotation_enu_flu)
+        self._field.observe(
+            DepthFrame(exposure_s, safety, K), pose.position_enu, pose.rotation_enu_flu,
+            translation_error_m=translation_error_m, rotation_error_rad=rotation_error_rad,
+        )
         processed = PerceptionFrame(frame.frame_id, exposure_s, pose, network, safety, self.generation)
         self.latest_frame = processed
         self.last_reason = "DEPTH_READY"

@@ -39,9 +39,10 @@ def _json(path, doc):
 def _write_fixture(path):
     params = np.zeros((1, 15, 14), dtype=np.float32)
     params[:, :, 5] = -0.96
-    params[:, :, 6] = 0.45 / 6.0
-    scores = np.ones((1, 15), dtype=np.float32)
-    scores[:, 7] = 0.0
+    params[:, :, 6] = 0.20 / 6.0
+    params[:, 7, 6] = 0.45 / 6.0
+    scores = np.zeros((1, 15), dtype=np.float32)
+    scores[:, 7] = 1.0
     radii = np.full((1, 15, 20), 0.5, dtype=np.float32)
     np.savez(path, traj_params=params, score=scores, radius=radii)
     return sha256(path.read_bytes()).hexdigest()

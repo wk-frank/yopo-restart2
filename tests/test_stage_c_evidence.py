@@ -89,3 +89,29 @@ def test_missing_boards_and_malformed_archive_are_not_a_pass(tmp_path):
     assert "manifest.json:expected-three-board-identities" in result["missing_evidence"]
     assert "judge.jsonl" in result["missing_evidence"]
     assert "uav2/flight_controller.jsonl" in result["missing_evidence"]
+
+
+@pytest.mark.parametrize(("change", "expected"), [
+    ("brake", True), ("restart", False), ("manual", False), ("deadline", False),
+])
+def test_continuous_actual_ctbr_counts_across_brake_permission_only(change, expected):
+    commands, truth = _evidence(_section(900))
+    before, after = commands[899:901]
+    fence = after["received_ns"]
+    authority = [{
+        "event": "command_invalidated", "invalidated_ns": fence,
+        **{field: before[field] for field in ("board_id", "session_id", "authority_epoch", "sequence")},
+    }]
+    for row in commands[900:]:
+        row["authority_epoch"] = 2
+        row["disposition"] = "verified_brake"
+        if change == "restart":
+            row["session_id"] = "second"
+    if change == "manual":
+        authority = [{
+            "event": "authority_changed", "board_id": "uav1", "authority": "MANUAL",
+            "received_ns": fence - 10,
+        }]
+    if change == "deadline":
+        authority[0]["invalidated_ns"] -= 10
+    assert ctbr_distance(commands, authority, truth, board_id="uav1")["passed_900_m"] is expected

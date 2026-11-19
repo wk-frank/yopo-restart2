@@ -23,6 +23,10 @@ def test_three_process_receiver_commands_drive_independent_judge(tmp_path):
         assert board["ctbr_received"] >= 5
         assert board["joint_net_m"] > .01
         assert board["paired_samples"] >= 5
+    for board_id in ("uav1", "uav2", "uav3"):
+        log = [json.loads(line) for line in (run / board_id / "board.jsonl").read_text().splitlines()]
+        selected = [row["target_speed_mps"] for row in log if row["event"] == "forward_plan"]
+        assert selected and all(speed == pytest.approx(.45) for speed in selected)
     judge = [json.loads(line) for line in (run / "judge.jsonl").read_text().splitlines()]
     assert {row["board_id"] for row in judge if row["consumed_authority"] == "CTBR"} == {
         "uav1", "uav2", "uav3",
