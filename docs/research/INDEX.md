@@ -149,7 +149,7 @@
 | m4-ros2-matrix-runs.json | m4 | M4-ROS2：formation-6-open 六档 × seeds 0–4 的 ROS 2 矩阵 | report-only、冻结 |
 | m4-ros2-matrix.md | m4 | 票 M4-ROS2：formation-6-open 六档 ROS 2 矩阵（只报数） | report-only、冻结 |
 | m5-a1-closeout-audit.md | m5 | M5-A1：口径 A 第一期收口前置核验 | report-only |
-| orin-nano-3uav-d435.md |  | restart-yopo 三机 Orin Nano 8GB 与 D435 实机部署方案 | report-only |
+| orin-nano-3uav-d435.md |  | restart-yopo 三机 Orin Nano 8GB 与 D435 实机部署方案 | 无 |
 | p1-inference-speed.md | p1 | P1：YOPO 单次推理耗时 | 冻结 |
 | p1b-sensor-speed.md | p1b | P1b：深度相机求交加速（默认关） | report-only、冻结 |
 | ros2-rflysim-humble.md |  | 票 S-RFLYSIM：RflySim-20.04（Ubuntu 22.04 Humble）ROS 2 锁步桥接、status 动态仓库与 L1 边界核查 | report-only |
@@ -174,6 +174,11 @@
 | sh4-tracking-bound.md |  | 票 SH4：TRACKING_BOUND 误报判定（只报数） | report-only、冻结 |
 | sh5-sitl-shadow-align-runs.json |  | 票 SH5：锁步 SITL 上重测 SH3/SH4 影子对齐开关。只报数。打开研究开关偏离上游。不放宽 0.15 m。 | report-only |
 | sh5-sitl-shadow-align.md |  | 票 SH5：SITL 重测影子对齐开关（只报数） | report-only、冻结 |
+| stage-c-authority.md |  | 阶段 C 飞控接收端权限复验 | 无 |
+| stage-c-hold.md |  | 阶段 C 三进程保持用例 | 无 |
+| stage-c-peers.md |  | 阶段 C 邻机占用检查 | 无 |
+| stage-c-perception.md |  | 阶段 C D435 曝光与首段通行 | 无 |
+| stage-c-three-process.md |  | 阶段 C 三进程墙钟闭环复验 | 无 |
 | t1-load-tolerant-timing.md | t1 | 票 T1：计时测试在高负载下可过 | 无 |
 | t2-six-drone-det-runs.json | t2 | 票 T2：6 机同 seed 高负载不确定性 | 无 |
 | t2-six-drone-det.md | t2 | 票 T2：6 机同 seed 高负载不确定性 | 无 |
