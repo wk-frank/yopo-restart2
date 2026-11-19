@@ -12,7 +12,9 @@
    精确还原训练态分布，解码按 (vel_max * ratio, acc_max * ratio², sgm_time / ratio) 缩放，
    保持空间避障几何曲线不变而实现 > 6 m/s 高速密林穿越（core/ 零改动）。
 5. 递归可行前缀+制动安全盾与同拍确定性优先级去冲突：每条提交轨迹均附带静态障碍净空与邻机三维
-   欧氏管分离校验的可停前缀+制动尾，保证障碍碰撞与机间碰撞严格为 0。
+   欧氏管分离校验的可停前缀+制动尾；有限采样及跟踪误差不提供连续时间零碰撞保证。
+显式 task.depth_only 时不接收场景障碍几何，静态净空与停车检查仅用原生深度形成的局部观测。
+该模式包含自由空间和机体邻域近似；机间检查仍使用通信轨迹，不构成形式化安全保证。
 """
 
 from __future__ import annotations
@@ -345,14 +347,20 @@ class _FastObstacleField:
             g_min = float(np.min(p[:, 2] - self.ground_z))
             best = min(best, max(g_min, 0.0))
         if self.has_up:
-            dx = p[:, None, 0] - self.up_xy[None, :, 0]
-            dy = p[:, None, 1] - self.up_xy[None, :, 1]
-            dr = np.maximum(np.hypot(dx, dy) - self.up_r[None, :], 0.0)
-            dz = np.maximum(
-                np.maximum(self.up_zlo[None, :] - p[:, None, 2], p[:, None, 2] - self.up_zhi[None, :]),
-                0.0,
-            )
-            best = min(best, float(np.min(np.hypot(dr, dz))))
+            mask = np.ones(len(self.up_r), dtype=bool)
+            if len(self.up_r) >= 200 and math.isfinite(best):
+                lo, hi = np.min(p[:, :2], axis=0), np.max(p[:, :2], axis=0)
+                delta = np.maximum(np.maximum(lo - self.up_xy, self.up_xy - hi), 0.0)
+                mask = np.linalg.norm(delta, axis=1) - self.up_r <= best
+            if np.any(mask):
+                dx = p[:, None, 0] - self.up_xy[None, mask, 0]
+                dy = p[:, None, 1] - self.up_xy[None, mask, 1]
+                dr = np.maximum(np.hypot(dx, dy) - self.up_r[None, mask], 0.0)
+                dz = np.maximum(
+                    np.maximum(self.up_zlo[None, mask] - p[:, None, 2], p[:, None, 2] - self.up_zhi[None, mask]),
+                    0.0,
+                )
+                best = min(best, float(np.min(np.hypot(dr, dz))))
         if self.has_ln:
             rel = p[:, None, :] - self.ln_a[None, :, :]
             axial = np.einsum("mnk,nk->mn", rel, self.ln_axis)
@@ -474,6 +482,14 @@ class ExploreFleet:
             s_vec = np.array([_finite_float(f"{did}.start_enu[{k}]", raw_s[k]) for k in range(3)], dtype=float)
             self.starts[did] = s_vec
 
+        cohesion = task.get("cohesion") or {}
+        self.cohesion_span_m = _nonneg_float("cohesion.max_progress_span_m", cohesion.get("max_progress_span_m", 0.0))
+        self.cohesion_lateral_gain = _nonneg_float("cohesion.lateral_gain", cohesion.get("lateral_gain", 0.0))
+        self.cohesion_open_lateral_gain = _nonneg_float(
+            "cohesion.open_lateral_gain", cohesion.get("open_lateral_gain", self.cohesion_lateral_gain)
+        )
+        self.cohesion_open_depth_m = _positive_float("cohesion.open_depth_m", cohesion.get("open_depth_m", 12.0))
+        self.cohesion_holds = 0
         self.dt = _positive_float("physics_dt", physics_dt)
         self.record_inputs = bool(record_inputs)
         self.input_digests: list[str] = []
@@ -525,6 +541,24 @@ class ExploreFleet:
         geom_dict = card.get("geometry") if isinstance(card.get("geometry"), dict) else {}
         all_obs = parse_geometry(geom_dict, card.get("ground_z")) if geom_dict else ()
         self._obs_field = _FastObstacleField(all_obs)
+        self.depth_only=bool(task.get("depth_only",False))
+        cam_cfg = card.get("camera") or {}
+        self.strict_unknown = bool(cam_cfg.get("strict_unknown", False))
+        if self.depth_only:
+            if all_obs:
+                raise ValueError("depth-only planner must not receive scene geometry")
+            from .depth_local import DepthLocalField
+            swept_r = cam_cfg.get("swept_radius_m", self.radius if self.strict_unknown else 1.2)
+            self.depth_fields={
+                did: DepthLocalField(
+                    cam_cfg.get("mount_xyz_body", (0, 0, 0)),
+                    max_range=cam_cfg.get("max_range_m", 20.0),
+                    strict_unknown=self.strict_unknown,
+                    swept_radius_m=swept_r,
+                    cam_rotation=cam_cfg.get("extrinsic_rotation_body_cam"),
+                )
+                for did in self.members
+            }
         # 检查是否存在靠近 x_goal 的 end_wall 以限制自然制动上界
         end_walls = [
             float(ob.lo[0])
@@ -803,9 +837,20 @@ class ExploreFleet:
             candidates.sort(key=lambda item: item[0])
             chosen = candidates[0][1]
         else:
-            chosen = np.array([pref_x, pref_y, self.z_goal], dtype=float)
+            chosen = p.copy() if self.depth_only else np.array([pref_x, pref_y, self.z_goal], dtype=float)
         self._terminal_goal[did] = chosen
         return chosen
+
+    def effective_lateral_gain(self, forward_clearance_m: float) -> float:
+        """Interpolate lateral slot cohesion from obstacle-rich to open corridor."""
+        base = self.cohesion_lateral_gain
+        high = self.cohesion_open_lateral_gain
+        if high <= base:
+            return base
+        lo_m = 6.0
+        hi_m = max(self.cohesion_open_depth_m, lo_m + 1e-3)
+        alpha = min(max((float(forward_clearance_m) - lo_m) / (hi_m - lo_m), 0.0), 1.0)
+        return base + alpha * (high - base)
 
     def _select_carrots(
         self,
@@ -818,7 +863,10 @@ class ExploreFleet:
     ) -> tuple[list[np.ndarray], float]:
         """利用本机深度图扇区净空与邻机预测位置，生成无槽位约束的最优前向引导点列表及最开阔偏航角。"""
         d = np.asarray(depth, dtype=np.float32)
-        clean = np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 20.0)
+        if self.strict_unknown or np.isposinf(d).any():
+            clean = np.where(np.isposinf(d), 20.0, np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 2.0))
+        else:
+            clean = np.where(np.isfinite(d) & (d > 0.05), np.minimum(d, 20.0), 20.0)
         h, w = clean.shape
         r_mid0, r_mid1 = max(0, int(0.26 * h)), min(h, int(0.74 * h))
         r_hi0, r_hi1 = max(0, int(0.08 * h)), max(1, int(0.32 * h))
@@ -884,7 +932,9 @@ class ExploreFleet:
 
             wall_pen = 0.8 * abs(cy_raw - cy)
             smooth_pen = 0.07 * abs(cy - prev_y)
+            lat_gain = self.effective_lateral_gain(d_mid)
             util = 2.2 * cos_w + 0.42 * min(d_mid, 15.0) - peer_pen - wall_pen - smooth_pen
+            util -= lat_gain * abs(cy - float(self.starts[did][1]))
             scored.append((util, np.array([cx, cy, cz], dtype=float), float(cy), d_mid))
 
         scored.sort(key=lambda item: item[0], reverse=True)
@@ -1119,13 +1169,29 @@ class ExploreFleet:
         return None
 
     def _plan_one_drone(self, did: str, now: float) -> np.ndarray | None:
+        if self.depth_only:
+            self._obs_field=self.depth_fields[did]
         sense = self._sense.get(did)
         if sense is None or sense[0] is None:
             self._count(did, "NO_DEPTH")
             return None
         frame, p_meas, _v_meas, _a_meas, yaw = sense
+        if self.depth_only and self.strict_unknown and not self._obs_field.has_current_evidence:
+            self._count(did, "NO_DEPTH")
+            return None
         head = self._head_state(did, now)
         peers = list(self._peer_heard_tubes[did].values())
+        if self.cohesion_span_m > 0.0:
+            tubes = self._peer_heard_tubes[did].values()
+            peer_x = [float(np.interp(now, tube[:, 0], tube[:, 1])) for tube in tubes if tube.size]
+            if peer_x and float(head[0, 0]) > min(peer_x) + self.cohesion_span_m:
+                brake = _fast_brake_traj(now, head, self.limits)
+                if brake is None:
+                    brake = hold_traj(head[0], now, .5)
+                if self._check_traj_safety(brake, peers)[0]:
+                    self.cohesion_holds += 1
+                    self._count(did, "COHESION_BRAKE")
+                    return self._set_commit(did, brake)
 
         # 已在锁定终点停稳：保持静止，不再重复跑网络
         locked = self._terminal_goal.get(did)

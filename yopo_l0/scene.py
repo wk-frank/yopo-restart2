@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -102,8 +103,24 @@ class SceneCard:
         blob = json.dumps(self.card, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(blob).hexdigest()
 
+    @cached_property
+    def _large_distance_index(self):
+        upright = tuple(o for o in self.obstacles if isinstance(o, Cylinder) and o.upright())
+        other = tuple(o for o in self.obstacles if not (isinstance(o, Cylinder) and o.upright()))
+        return (np.asarray([o.center_xy for o in upright], dtype=float).reshape(-1, 2),
+                np.asarray([o.radius for o in upright]), np.asarray([o.z_lo for o in upright]),
+                np.asarray([o.z_hi for o in upright]), other)
+
     def min_distance(self, p: np.ndarray) -> float:
-        return min(o.distance(p) for o in self.obstacles)
+        if len(self.obstacles) < 200:
+            return min(o.distance(p) for o in self.obstacles)
+        xy, radius, zlo, zhi, other = self._large_distance_index
+        best = min((o.distance(p) for o in other), default=float("inf"))
+        if len(radius):
+            dr = np.maximum(np.linalg.norm(xy - np.asarray(p)[:2], axis=1) - radius, 0.0)
+            dz = np.maximum(np.maximum(zlo - p[2], p[2] - zhi), 0.0)
+            best = min(best, float(np.min(np.hypot(dr, dz))))
+        return best
 
 
 def parse_geometry(geom: dict, ground_z: float | None) -> tuple[Obstacle, ...]:
@@ -134,7 +151,11 @@ def load_card(path: str | Path, geometry_override: dict | None = None) -> SceneC
     path = Path(path)
     card = json.loads(path.read_text())
     geom = geometry_override
-    if geom is None and isinstance(card.get("forest"), dict):
+    if geom is None and isinstance(card.get("wide_field"), dict):
+        from .wide_scene import generate_wide_geometry
+
+        geom = generate_wide_geometry(card["wide_field"])
+    elif geom is None and isinstance(card.get("forest"), dict):
         from .forest import generate_forest_geometry
 
         geom = generate_forest_geometry(card["forest"])

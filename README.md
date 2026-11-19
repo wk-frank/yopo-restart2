@@ -19,6 +19,28 @@ scripts/demo.sh     # 产物在 out/demo/
 - [已知限制](docs/LIMITATIONS.md)：说明 L0 是假动力学、所有偏离上游的构造，以及继续只报数的清单。
 - [上游策略 vs 影子盾](docs/results/12e-upstream-vs-shield.md)：同一 commit 上上游策略与影子盾、certified 硬门的对照；影子盾只记录、不改动作。
 
+## CTBR 六机大场景（report-only）
+
+[无先验地图高密度树林验收](docs/research/depth-only-dense-forest900.md)：2.2×2.2 km 场景包含 **75,616 根树干**，为上一版 12,100 根的 6.249 倍，树径及高度范围保持不变，仅保留中心起飞区。六机从中心同向出发，避障时允许编队伸缩；本趟 seed 0 中每机 CTBR 段 Gazebo 真值水平位移 **937.02–937.40 m**，6/6 到达并降落，碰撞及真值缺失样本均为 0，15 项机器验收通过。同趟 Gazebo/Ogre2 直接记录 436.0 秒 RGB 飞行画面。
+
+规划器和桥接层已剥离已知障碍几何，避障仅使用六路 Gazebo 原生深度和机间通信轨迹。本机姿态、里程计和任务目标仍用于控制，全图几何只供 Gazebo 建模及独立真值验收。密集树干使用带物理碰撞的分块网格，保留逐树位置与尺寸 manifest 及资产哈希。
+
+```bash
+docker build --pull=false -t yopo-restart-sitl:ctbr-opencv-4.10 -f scripts/sitl/Dockerfile.ctbr scripts/sitl
+docker build -f scripts/sitl/Dockerfile.gazebo-depth -t yopo-restart-sitl:gazebo-depth .
+YOPO_SITL_DOCKER_NETWORK=bridge YOPO_SITL_WALL_TIMEOUT=14400 \
+YOPO_SITL_MEMORY_LIMIT=11g YOPO_LIVE_DEPTH_SOURCE=gazebo \
+YOPO_SITL_GAZEBO_GPU=wsl-d3d12 YOPO_DEPTH_BACKEND=opencv \
+flock /tmp/yopo-sitl.lock scripts/sitl/run_yopo_l0_sitl.sh \
+  --image yopo-restart-sitl:gazebo-depth \
+  --scene scenes/explore-6-depth-only-dense-forest900.json --n 6 --policy explore \
+  --lockstep --scene-world --control-mode ctbr --record-dt 0.2 --seed 0
+```
+
+`gazebo-flight.mp4`、深度抽样、时间戳、场景及源码哈希写入打印出的运行目录；`scripts/render_gazebo_flight.py --run <运行目录> --out <输出目录>` 可生成位移标注版和加速预览。缺帧或帧龄超过 0.20 s 时失败关闭。D3D12 选项用于本机 WSL GPU，默认软件 EGL。
+
+这是单场景、单种子的 SITL 验证。局部自由空间检查没有形式化安全保证，未验证完整 SLAM、全图遍历、真实无线链路或墙钟实时性。起飞与终点保持使用 PVA，巡航绕障使用 CTBR，最后 NAV_LAND；不写 PX4 参数，不是实体飞机实飞。历史 [3025 障碍原生深度结果](docs/research/gazebo-native-center900.md) 使用已知地图几何安全盾，不能充作本轮验收。[早期场景卡深度记录](docs/research/ctbr-center900.md) 和 [CTBR-1 高速性能对照](docs/research/ctbr-flatness-ticket.md) 保留，后者尚待完成。
+
 ## L0（box CPU，无界面，锁步确定性）
 
 ```bash

@@ -1,0 +1,158 @@
+{
+  "schema": "yopo-restart/ctbr-center900/1",
+  "report_only": true,
+  "criteria_frozen": false,
+  "run_id": "20261117T061822-yopo-n6",
+  "runtime_source": {
+    "commit": "2fb2a4e23c33dedf791bdd052939a5677e532292",
+    "sha256": {
+      "yopo_l0/net.py": "24b0a2343f4a6ad908ec335aaa112ff0ed40df9257016aa53a87f34693d798eb",
+      "yopo_l0/depth_accel.py": "a2516d18a6712c1c9e5f14abc4b903a1d0e7b09f90d81cd852efc59afd072ed3",
+      "yopo_l0/ctbr.py": "0482332be42034ac8675dbd74c1c85e1fcdd7b0296172aebb51b41ca6f1dc408",
+      "yopo_l0/explore.py": "edf5c2ac14ceca4e93b389926113759a641c3fc985ccfc37643961f809d4acf9",
+      "yopo_l0/scene.py": "67ea2a376fb5dd570ae2c517d1789367f2a1af77563f49d3b6783664849a1643",
+      "yopo_l0/sensor.py": "a3259e64d82c4859eb6a0a1d08db7f76324fbf78917a65b1974d1965cb3fb50e",
+      "yopo_l0/wide_scene.py": "07d8ee8e82fa99abb06d9ef6a386ba19ec799b1d7c910b4f9e2a67d01f94f86d",
+      "yopo_l0/sitl_bridge.py": "6c49ba326e90ffe87a6cb9f4f3e74a6edfc624a49e3911933ea3e4bb7d3b39c8",
+      "yopo_l0/flight_evidence.py": "d0ef74ef2bfb0b56eb0502c251b537d6c49302c752bc6ec6c6fc32fbca70ab5f",
+      "scripts/sitl/yopo_l0_live.py": "00ef7500314cc569e00f14e8746cd26e270cfaf4847308b56db149d3afb25a4a"
+    },
+    "scene_sha256": "fbf8608509f7feaf8b3434145621e199330935273fe19abe81e8ab63ab1dadc7",
+    "seed": 0
+  },
+  "acceptance": {
+    "passed": true,
+    "required_per_vehicle_horizontal_displacement_m": 900.0,
+    "checks": {
+      "px4_sitl_success": true,
+      "six_arrived": true,
+      "ctbr_used_by_every_vehicle": true,
+      "per_vehicle_ctbr_distance": true,
+      "no_px4_parameter_writes": true,
+      "all_world_obstacles_present": true,
+      "per_vehicle_odometry_900m": true,
+      "per_vehicle_gazebo_900m": true,
+      "gazebo_collision_free": true,
+      "gazebo_coverage_complete": true
+    }
+  },
+  "network_depth_backend": "opencv",
+  "scene_world": {
+    "enabled": true,
+    "scene": "explore-6-center900-ctbr",
+    "world_name": "default",
+    "n_cylinders": 3025,
+    "n_leaning_cylinders": 0,
+    "n_boxes": 0,
+    "sdf_sha256": "d7bf0b3e0be3da7c92eb9810059357d93a2d4e3fb4234dc7a598eca86065be87",
+    "px4_parameters_written": [],
+    "sdf_path": "/out/worlds/default.sdf"
+  },
+  "sim_time_s": 221.46,
+  "wall_time_s": 1453.266112967,
+  "rtf": 0.15238778226780877,
+  "truth_flight": {
+    "source": "gazebo-dynamic-pose",
+    "max_horizontal_displacement_m": {
+      "uav0": 942.7558479768691,
+      "uav1": 942.7168308376399,
+      "uav2": 942.7467514961323,
+      "uav3": 942.8178949379817,
+      "uav4": 942.8191825277602,
+      "uav5": 942.778096590838
+    },
+    "samples": {
+      "uav0": 10185,
+      "uav1": 10188,
+      "uav2": 10181,
+      "uav3": 10186,
+      "uav4": 10194,
+      "uav5": 10187
+    },
+    "missing_plan_samples": {
+      "uav0": 0,
+      "uav1": 0,
+      "uav2": 0,
+      "uav3": 0,
+      "uav4": 0,
+      "uav5": 0
+    },
+    "min_body_surface_clearance_plan_m": 0.7014567213039703,
+    "min_centre_peer_distance_plan_m": 2.500161082679037,
+    "collision_samples": 0
+  },
+  "vehicles": [
+    {
+      "id": "uav0",
+      "gazebo_displacement_m": 942.7558479768691,
+      "px4_displacement_m": 939.9678850605785,
+      "arrival_after_handover_s": 202.14,
+      "ctbr_ticks": 9935,
+      "hover_thrust": 0.72578,
+      "ctbr_max_horizontal_displacement_truth_m": 936.2880778868822,
+      "hover_calibration_samples": 1
+    },
+    {
+      "id": "uav1",
+      "gazebo_displacement_m": 942.7168308376399,
+      "px4_displacement_m": 939.9475531093913,
+      "arrival_after_handover_s": 201.86,
+      "ctbr_ticks": 9935,
+      "hover_thrust": 0.72542,
+      "ctbr_max_horizontal_displacement_truth_m": 936.4955057847275,
+      "hover_calibration_samples": 1
+    },
+    {
+      "id": "uav2",
+      "gazebo_displacement_m": 942.7467514961323,
+      "px4_displacement_m": 939.9554057245533,
+      "arrival_after_handover_s": 201.84,
+      "ctbr_ticks": 9935,
+      "hover_thrust": 0.72683,
+      "ctbr_max_horizontal_displacement_truth_m": 936.4728060135634,
+      "hover_calibration_samples": 1
+    },
+    {
+      "id": "uav3",
+      "gazebo_displacement_m": 942.8178949379817,
+      "px4_displacement_m": 940.0098349786659,
+      "arrival_after_handover_s": 202.72,
+      "ctbr_ticks": 9960,
+      "hover_thrust": 0.72612,
+      "ctbr_max_horizontal_displacement_truth_m": 937.0822381497248,
+      "hover_calibration_samples": 1
+    },
+    {
+      "id": "uav4",
+      "gazebo_displacement_m": 942.8191825277602,
+      "px4_displacement_m": 940.0044901051631,
+      "arrival_after_handover_s": 202.76000000000002,
+      "ctbr_ticks": 9935,
+      "hover_thrust": 0.72597,
+      "ctbr_max_horizontal_displacement_truth_m": 936.4713852205153,
+      "hover_calibration_samples": 1
+    },
+    {
+      "id": "uav5",
+      "gazebo_displacement_m": 942.778096590838,
+      "px4_displacement_m": 939.9951128512577,
+      "arrival_after_handover_s": 201.66000000000003,
+      "ctbr_ticks": 9910,
+      "hover_thrust": 0.72737,
+      "ctbr_max_horizontal_displacement_truth_m": 937.0787115269568,
+      "hover_calibration_samples": 1
+    }
+  ],
+  "formation_from_5hz_truth": {
+    "max_progress_span_m": 5.040802719590886,
+    "max_lateral_width_m": 28.071194685974252
+  },
+  "px4_parameters_written": [],
+  "limitations": [
+    "Single seed 0 SITL acceptance; no physical flight.",
+    "Fixed outward heading, local YOPO depth proposals plus existing geometry safety shield; no SLAM/frontier coverage proof.",
+    "50 Hz simulation-clock control is not a wall-clock real-time claim.",
+    "Original CTBR-1 high-speed 3/6 vehicle seeds 0..4 paired study remains pending.",
+    "Replay JavaScript exercised with a canvas/DOM stub; background browser host unavailable. PNG and video frames visually checked."
+  ]
+}

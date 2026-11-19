@@ -22,6 +22,8 @@
 | b8-fallback-floor.md | b8 | 票 B8：柱净空门全拒退路地板与起步斜坡组合（只报数） | report-only、冻结 |
 | bat1-lockstep-battery-runs.json |  | 票 BAT1：锁步电池 unhealthy（不改 BAT_ 参数，只诊断） | report-only |
 | bat1-lockstep-battery.md |  | 票 BAT1：锁步电池 unhealthy（不改 `BAT_` 参数，只诊断） | report-only |
+| ctbr-center900-runs.json |  | （无说明字段） | 无 |
+| ctbr-center900.md |  | CTBR-CENTER900：中心起飞、全域障碍与六机长程探索 | report-only、冻结 |
 | ctbr-flatness-ticket.md |  | 票 CTBR-1：微分平坦 CTBR（集体推力 + 机体角速率 `VehicleRatesSetpoint`）接缝与验收规范 | report-only |
 | d1-geometric-fallback.md | d1 | 票 D1：提交前的一次性几何回退 | report-only、冻结 |
 | d2-teacher-batch.json | d2 | （无说明字段） | 无 |
@@ -55,6 +57,8 @@
 | d8-dagger-variance.md | d8 | 票 D8：DAgger 方差与 g2 退化归因（只报数） | report-only |
 | d9-cap-weight-runs.json | d9 | 票 D9：限速与 g2 加权 5 种子确认（只报数） | report-only |
 | d9-cap-weight.md | d9 | 票 D9：限速与 g2 加权 5 种子确认（只报数） | report-only |
+| depth-only-dense-forest900-runs.json |  | （无说明字段） | 无 |
+| depth-only-dense-forest900.md |  | 无先验地图高密度树林六机900m验收 | 冻结 |
 | e-a1-inter-drone-filter.md | e-a1 | 票 E-A1：机间过滤开关，默认关 | report-only、冻结 |
 | e-a2-inter-soft-yield-runs.json | e-a2 | 只报数。report-only。不改默认 inter_drone_soft_yield false、empty_brake false、track_clearance false。四档都打开 E-A1（阈值 1.0 m、惩罚 0）和 empty_brake；geom 两档再打开 track_clearance mode=geom、margin 0.08 m。全部偏离上游。soft_yield 默认关。hard_min_m 0.75 m 高于 0.70 m 机间碰撞球。这是假设，不是论文复现（障碍半径 0.20 m，边长 20.0 m）。未冻结，不进 scenes/suite.txt，不设 gates。 | report-only |
 | e-a2-inter-soft-yield.md | e-a2 | 票 E-A2：机间过滤防死锁软让行，默认关 | report-only、冻结 |
@@ -140,9 +144,12 @@
 | explore-free-swarm-runs.json |  | （无说明字段） | 无 |
 | explore-free-swarm.md |  | 无编队水平横排起飞高效率多机穿越（`ExploreFleet`）10 种子基准报告 | report-only、冻结 |
 | explore-sitl.md |  | 无编队水平横排起飞与高速多机避障穿越 PX4 SITL 锁步实测（`explore-sitl`，report-only） | report-only |
+| gazebo-native-center900-runs.json |  | （无说明字段） | 无 |
+| gazebo-native-center900.md |  | Gazebo 原生深度：六机 YOPO＋CTBR 900 m 验收 | report-only、冻结 |
 | m4-ros2-matrix-runs.json | m4 | M4-ROS2：formation-6-open 六档 × seeds 0–4 的 ROS 2 矩阵 | report-only、冻结 |
 | m4-ros2-matrix.md | m4 | 票 M4-ROS2：formation-6-open 六档 ROS 2 矩阵（只报数） | report-only、冻结 |
 | m5-a1-closeout-audit.md | m5 | M5-A1：口径 A 第一期收口前置核验 | report-only |
+| orin-nano-3uav-d435.md |  | restart-yopo 三机 Orin Nano 8GB 与 D435 实机部署方案 | 无 |
 | p1-inference-speed.md | p1 | P1：YOPO 单次推理耗时 | 冻结 |
 | p1b-sensor-speed.md | p1b | P1b：深度相机求交加速（默认关） | report-only、冻结 |
 | ros2-rflysim-humble.md |  | 票 S-RFLYSIM：RflySim-20.04（Ubuntu 22.04 Humble）ROS 2 锁步桥接、status 动态仓库与 L1 边界核查 | report-only |
@@ -167,6 +174,11 @@
 | sh4-tracking-bound.md |  | 票 SH4：TRACKING_BOUND 误报判定（只报数） | report-only、冻结 |
 | sh5-sitl-shadow-align-runs.json |  | 票 SH5：锁步 SITL 上重测 SH3/SH4 影子对齐开关。只报数。打开研究开关偏离上游。不放宽 0.15 m。 | report-only |
 | sh5-sitl-shadow-align.md |  | 票 SH5：SITL 重测影子对齐开关（只报数） | report-only、冻结 |
+| stage-c-authority.md |  | 阶段 C 飞控接收端权限复验 | 无 |
+| stage-c-hold.md |  | 阶段 C 三进程保持用例 | 无 |
+| stage-c-peers.md |  | 阶段 C 邻机占用检查 | 无 |
+| stage-c-perception.md |  | 阶段 C D435 曝光与首段通行 | 无 |
+| stage-c-three-process.md |  | 阶段 C 三进程墙钟闭环复验 | 无 |
 | t1-load-tolerant-timing.md | t1 | 票 T1：计时测试在高负载下可过 | 无 |
 | t2-six-drone-det-runs.json | t2 | 票 T2：6 机同 seed 高负载不确定性 | 无 |
 | t2-six-drone-det.md | t2 | 票 T2：6 机同 seed 高负载不确定性 | 无 |
