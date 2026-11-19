@@ -25,7 +25,7 @@ def _loopback_socket(stack: ExitStack) -> socket.socket:
 
 
 class HoldBench:
-    def __init__(self, out: Path, stack: ExitStack):
+    def __init__(self, out: Path, stack: ExitStack, *, positions=None):
         self.out = out
         self.stack = stack
         self.selector = stack.enter_context(selectors.DefaultSelector())
@@ -37,9 +37,10 @@ class HoldBench:
         with ExitStack() as reservations:
             binds = {name: _loopback_socket(reservations).getsockname() for name in self.boards}
             for i, name in enumerate(self.boards):
-                self._configure_receiver(name, i, binds)
+                position = positions[i] if positions is not None else (0.0, i * 10.0, 0.0)
+                self._configure_receiver(name, position, binds)
 
-    def _configure_receiver(self, name, lane, binds) -> None:
+    def _configure_receiver(self, name, position, binds) -> None:
         directory = self.out / name
         directory.mkdir()
         receiver = _loopback_socket(self.stack)
@@ -51,7 +52,7 @@ class HoldBench:
             "bind": binds[name],
             "flight_controller_endpoint": receiver.getsockname(),
             "peers": {board: addr for board, addr in binds.items() if board != name},
-            "hold_position_enu_m": (0.0, lane * 10.0, 0.0),
+            "hold_position_enu_m": position,
             "control_hz": 50.0,
             "command_ttl_s": 0.10,
         }, indent=2) + "\n", encoding="utf-8")
@@ -73,14 +74,14 @@ class HoldBench:
         self.flight_controllers[name] = flight_controller
         self.selector.register(receiver, selectors.EVENT_READ, flight_controller)
 
-    def start(self, board: str, *, extra_args: tuple[str, ...] = ()) -> None:
+    def start(self, board: str, *, extra_args: tuple[str, ...] = (), env=None) -> None:
         directory = self.out / board
         with (directory / "runtime_stderr.log").open("ab") as stderr:
             self.processes[board] = subprocess.Popen(
                 [sys.executable, "-m", "yopo_l0.board_runtime",
                  "--config", str(directory / "config.json"),
                  "--log", str(directory / "board.jsonl"), *extra_args],
-                stdout=subprocess.DEVNULL, stderr=stderr,
+                stdout=subprocess.DEVNULL, stderr=stderr, env=env,
             )
 
     def stop(self, board: str) -> None:

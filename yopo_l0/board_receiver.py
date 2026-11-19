@@ -64,6 +64,7 @@ class SimFlightController:
         self._disposition = "relinquished"
         self._active: dict | None = None
         self._last_invalidation_ns: int | None = None
+        self.last_motion_invalidated_ns: int | None = None
 
     @property
     def current_command(self) -> dict | None:
@@ -83,6 +84,7 @@ class SimFlightController:
         old = self._active
         self._active = None
         self._last_invalidation_ns = min(stamp_ns, old["valid_until_ns"])
+        self.last_motion_invalidated_ns = self._last_invalidation_ns
         if self.authority_log is not None:
             self.authority_log(
                 "command_invalidated", board_id=self.config.board_id, reason=reason,

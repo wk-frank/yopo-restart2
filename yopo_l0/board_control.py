@@ -52,10 +52,18 @@ class ControlReference:
 
 
 @dataclass(frozen=True)
+class PlanEvidence:
+    frame_id: int
+    exposure_ns: int
+    brake_start_ns: int
+
+
+@dataclass(frozen=True)
 class BrakeTail:
     sample: Callable[[int], ControlReference]
     valid_from_ns: int
     valid_until_ns: int
+    evidence: PlanEvidence | None = None
 
     def __post_init__(self):
         if (not callable(self.sample) or type(self.valid_from_ns) is not int
@@ -69,6 +77,7 @@ class ControlPlan:
     sample: Callable[[int], ControlReference]
     valid_until_ns: int
     verified_brake: BrakeTail | None = None
+    evidence: PlanEvidence | None = None
 
     def __post_init__(self):
         if not callable(self.sample) or type(self.valid_until_ns) is not int or self.valid_until_ns <= 0:
@@ -140,9 +149,9 @@ class BoardControl:
         self._plan = None
         self._reason = reason
 
-    def invalidate(self, reason: str) -> None:
+    def invalidate(self, reason: str, *, preserve_brake: bool = True) -> None:
         with self._lock:
-            self._invalidate_locked(reason, preserve_brake=True)
+            self._invalidate_locked(reason, preserve_brake=preserve_brake)
             generation = self._generation
         self.log("plan_invalidated", reason=reason, generation=generation)
 
@@ -182,6 +191,12 @@ class BoardControl:
                  deadline_ns=ticket.deadline_ns, valid_until_ns=plan.valid_until_ns)
         return reason is None
 
+    def decline_plan(self, ticket: PlanTicket, reason: str) -> None:
+        with self._lock:
+            if self._ticket is ticket:
+                self._ticket = None
+        self.log("candidate_declined", plan_sequence=ticket.sequence, generation=ticket.generation, reason=reason)
+
     def _report_disposition(self, disposition: str, reason: str, tick: ControlTick) -> None:
         if self._disposition != (disposition, reason):
             self.log("control_disposition", disposition=disposition, reason=reason, sequence=tick.sequence)
@@ -198,6 +213,7 @@ class BoardControl:
         from .board_runtime import ControlOutput
 
         now_ns = tick.now_ns
+        evidence = None
         with self._lock:
             requested, shadow = self._requested, self._shadow
             if requested == "MANUAL":
@@ -223,9 +239,11 @@ class BoardControl:
                     authority, disposition = requested, "tracking"
                     reason = "TERMINAL_HANDOVER" if self._terminal else "PLAN_ACTIVE"
                     reference, valid_until = plan.sample, plan.valid_until_ns
+                    evidence = plan.evidence
                 elif brake is not None:
                     authority, disposition = requested, "verified_brake"
                     reference, valid_until = brake.sample, brake.valid_until_ns
+                    evidence = brake.evidence
                 elif math.hypot(*odometry.velocity_enu_mps) <= 0.05 and requested == "PVA":
                     authority, disposition = "PVA", "hold"
                     if self._hold_reference is None:
@@ -252,6 +270,9 @@ class BoardControl:
             valid_until_ns = min(valid_until_ns, valid_until)
         position = tuple(float(value) for value in odometry.position_enu_m)
         speed = math.hypot(*reference.velocity_enu_mps)
+        provenance = ({"frame_id": evidence.frame_id, "exposure_ns": evidence.exposure_ns,
+                       "brake_start_ns": evidence.brake_start_ns}
+                      if evidence is not None else {})
         if authority == "CTBR" or shadow:
             dt = ((now_ns - self._last_ctbr_ns) / 1e9 if self._last_ctbr_ns is not None
                   else 1.0 / tick.config.control_hz)
@@ -265,7 +286,7 @@ class BoardControl:
             self._last_ctbr_ns = now_ns
             if authority == "CTBR":
                 return ControlOutput(authority, {"kind": "ctbr", **fields}, valid_until_ns,
-                                     disposition, position, odometry.stamp_ns, speed, reason)
+                                     disposition, position, odometry.stamp_ns, speed, reason, **provenance)
             self.log("ctbr_shadow", sequence=tick.sequence, ctbr=fields, position_enu_m=position,
                      position_stamp_ns=odometry.stamp_ns)
         else:
@@ -278,4 +299,4 @@ class BoardControl:
             "yaw_rad": float(reference.yaw_rad),
         }
         return ControlOutput(authority, command, valid_until_ns, disposition, position,
-                             odometry.stamp_ns, speed, reason)
+                             odometry.stamp_ns, speed, reason, **provenance)

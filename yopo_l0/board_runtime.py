@@ -100,6 +100,10 @@ class ControlOutput:
     position_stamp_ns: int | None = None
     reference_speed_mps: float | None = None
     reason: str | None = None
+    frame_id: int | None = None
+    exposure_ns: int | None = None
+    brake_start_ns: int | None = None
+    peer_hold_ready: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +112,7 @@ class BoardBackend:
 
     control_step: Callable[[ControlTick], ControlOutput | None]
     invalidate: Callable[[str], None] | None = None
+    close: Callable[[], None] | None = None
 
 
 BackendFactory = Callable[[BoardConfig, JsonlLog, Event, Path | None], BoardBackend]
@@ -203,66 +208,74 @@ def run_board(
         sequence = 0
         authority_epoch = 0
         last_permission = None
-        while not stopping.wait(max(0.0, (scheduled_ns - time.monotonic_ns()) / NS_PER_S)):
-            _receive_heartbeats(link, peers_by_addr, seen, log)
-            now_ns = time.monotonic_ns()
-            missed = max(0, (now_ns - scheduled_ns) // period_ns)
-            scheduled_ns += missed * period_ns
-            peer_ages = {
-                peer: now_ns - seen[peer][0] if peer in seen else None
-                for peer in config.peers
-            }
-            tick = ControlTick(config, session_id, sequence, scheduled_ns, now_ns, peer_ages)
-            output = backend.control_step(tick)
-            completed_ns = time.monotonic_ns()
-            reason = None
-            if missed or completed_ns >= scheduled_ns + period_ns:
-                reason = "CONTROL_OVERRUN"
-            elif (output is not None and output.valid_until_ns is not None
-                  and completed_ns >= output.valid_until_ns):
-                reason = "CONTROL_OUTPUT_EXPIRED"
-            if reason is not None:
-                if backend.invalidate is not None:
-                    backend.invalidate(reason)
-                output = ControlOutput("NONE", {"kind": "authority_only", "reason": reason},
-                                       disposition="relinquished", reason=reason)
-                log("control_output_revoked", sequence=sequence, reason=reason)
-            log("control_tick", sequence=sequence, scheduled_ns=scheduled_ns,
-                started_ns=now_ns, completed_ns=completed_ns, missed_periods=missed,
-                peer_ages_ns=peer_ages)
-            if output is not None:
-                sent_ns = time.monotonic_ns()
-                valid_until_ns = tick.scheduled_ns + ttl_ns
-                if output.valid_until_ns is not None:
-                    valid_until_ns = min(output.valid_until_ns, valid_until_ns)
-                if output.authority in ("NONE", "MANUAL"):
-                    # A revocation must still reach the receiver when a control tick overruns.
-                    valid_until_ns = sent_ns + ttl_ns
-                if sent_ns < valid_until_ns:
-                    permission = (output.authority, output.disposition)
-                    if permission != last_permission:
-                        authority_epoch += 1
-                        last_permission = permission
-                    envelope = {
-                        **identity, "type": "command", "sequence": sequence,
-                        "sent_ns": sent_ns, "valid_until_ns": valid_until_ns,
-                        "authority": output.authority, "authority_epoch": authority_epoch,
-                        "disposition": output.disposition, "command": output.command,
-                        "position_enu_m": output.position_enu_m,
-                        "position_stamp_ns": output.position_stamp_ns,
-                        "reference_speed_mps": output.reference_speed_mps, "reason": output.reason,
-                    }
-                    if _send(link, config.flight_controller_endpoint, envelope, log):
-                        log("command_sent", **envelope)
-                else:
-                    log("command_expired", sequence=sequence, valid_until_ns=valid_until_ns)
-            heartbeat = {"type": "heartbeat", "board_id": config.board_id, "session_id": session_id,
-                         "sequence": sequence, "sent_ns": time.monotonic_ns()}
-            for peer, addr in config.peers.items():
-                if _send(link, addr, heartbeat, log):
-                    log("heartbeat_sent", peer_id=peer, sequence=sequence, sent_ns=heartbeat["sent_ns"])
-            scheduled_ns += period_ns
-            sequence += 1
+        try:
+            while not stopping.wait(max(0.0, (scheduled_ns - time.monotonic_ns()) / NS_PER_S)):
+                _receive_heartbeats(link, peers_by_addr, seen, log)
+                now_ns = time.monotonic_ns()
+                missed = max(0, (now_ns - scheduled_ns) // period_ns)
+                scheduled_ns += missed * period_ns
+                peer_ages = {
+                    peer: now_ns - seen[peer][0] if peer in seen else None
+                    for peer in config.peers
+                }
+                tick = ControlTick(config, session_id, sequence, scheduled_ns, now_ns, peer_ages)
+                output = backend.control_step(tick)
+                completed_ns = time.monotonic_ns()
+                reason = None
+                if missed or completed_ns >= scheduled_ns + period_ns:
+                    reason = "CONTROL_OVERRUN"
+                elif (output is not None and output.valid_until_ns is not None
+                      and completed_ns >= output.valid_until_ns):
+                    reason = "CONTROL_OUTPUT_EXPIRED"
+                if reason is not None:
+                    if backend.invalidate is not None:
+                        backend.invalidate(reason)
+                    output = ControlOutput("NONE", {"kind": "authority_only", "reason": reason},
+                                           disposition="relinquished", reason=reason)
+                    log("control_output_revoked", sequence=sequence, reason=reason)
+                log("control_tick", sequence=sequence, scheduled_ns=scheduled_ns,
+                    started_ns=now_ns, completed_ns=completed_ns, missed_periods=missed,
+                    peer_ages_ns=peer_ages)
+                if output is not None:
+                    sent_ns = time.monotonic_ns()
+                    valid_until_ns = tick.scheduled_ns + ttl_ns
+                    if output.valid_until_ns is not None:
+                        valid_until_ns = min(output.valid_until_ns, valid_until_ns)
+                    if output.authority in ("NONE", "MANUAL"):
+                        # A revocation must still reach the receiver when a control tick overruns.
+                        valid_until_ns = sent_ns + ttl_ns
+                    if sent_ns < valid_until_ns:
+                        permission = (output.authority, output.disposition)
+                        if permission != last_permission:
+                            authority_epoch += 1
+                            last_permission = permission
+                        envelope = {
+                            **identity, "type": "command", "sequence": sequence,
+                            "sent_ns": sent_ns, "valid_until_ns": valid_until_ns,
+                            "authority": output.authority, "authority_epoch": authority_epoch,
+                            "disposition": output.disposition, "command": output.command,
+                            "position_enu_m": output.position_enu_m,
+                            "position_stamp_ns": output.position_stamp_ns,
+                            "reference_speed_mps": output.reference_speed_mps, "reason": output.reason,
+                            "frame_id": output.frame_id, "exposure_ns": output.exposure_ns,
+                            "brake_start_ns": output.brake_start_ns,
+                            "peer_hold_ready": output.peer_hold_ready,
+                        }
+                        if _send(link, config.flight_controller_endpoint, envelope, log):
+                            log("command_sent", **envelope)
+                    else:
+                        log("command_expired", sequence=sequence, valid_until_ns=valid_until_ns)
+                heartbeat = {"type": "heartbeat", "board_id": config.board_id, "session_id": session_id,
+                             "sequence": sequence, "sent_ns": time.monotonic_ns()}
+                for peer, addr in config.peers.items():
+                    if _send(link, addr, heartbeat, log):
+                        log("heartbeat_sent", peer_id=peer, sequence=sequence, sent_ns=heartbeat["sent_ns"])
+                scheduled_ns += period_ns
+                sequence += 1
+        finally:
+            stopping.set()
+            if backend.close is not None:
+                backend.close()
         log("session_stopped")
 
 
