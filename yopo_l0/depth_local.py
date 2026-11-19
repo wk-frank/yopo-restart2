@@ -3,6 +3,9 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 
+_SURFACE_VOXEL_M = 0.12
+
+
 class DepthLocalField:
     def __init__(
         self,
@@ -12,6 +15,7 @@ class DepthLocalField:
         strict_unknown: bool = False,
         swept_radius_m: float | None = None,
         cam_rotation=None,
+        history_frames: int = 8,
     ):
         self.mount = np.asarray(mount, dtype=float)
         self.max_range = float(max_range)
@@ -26,6 +30,7 @@ class DepthLocalField:
             if cam_rotation is None
             else np.asarray(cam_rotation, dtype=float).reshape(3, 3)
         )
+        self.history_frames = history_frames
         self.has_current_evidence = False
         self.frames = []
         self.tree = None
@@ -50,19 +55,62 @@ class DepthLocalField:
         self.has_current_evidence = bool(valid.any() or np.isposinf(d).any())
         swept_center = p.copy() if self.strict_unknown else origin
         self.frames.append((frame.stamp, origin, R_wc, frame.K, d, swept_center))
-        self.frames = [f for f in self.frames if frame.stamp - f[0] < 2.0][-8:]
+        self.frames = [f for f in self.frames if frame.stamp - f[0] < 2.0][-self.history_frames:]
         self.surfaces.append(points)
-        self.surfaces = self.surfaces[-8:]
+        self.surfaces = self.surfaces[-self.history_frames:]
         # Retain recently observed surfaces when they move behind the camera.
         cloud = np.concatenate(self.surfaces)
         if len(cloud):
-            cells = np.floor(cloud / 0.12).astype(np.int64)
+            cells = np.floor(cloud / _SURFACE_VOXEL_M).astype(np.int64)
             # Collision-free mixed-radix voxel key within the supported +/-10 km worlds.
             keys = cells[:, 0] + cells[:, 1] * 1_000_000 + cells[:, 2] * 1_000_000_000_000
             _, ids = np.unique(keys, return_index=True)
             self.tree = cKDTree(cloud[ids])
         else:
             self.tree = None
+
+    def intersects_observed_surface(self, centers, radii) -> np.ndarray:
+        """Conservatively expand for displacement inside each retained surface voxel."""
+        if self.tree is None:
+            return np.zeros(len(centers), dtype=bool)
+        distance = self.tree.query(centers, workers=1)[0]
+        return distance <= radii + np.sqrt(3.0) * _SURFACE_VOXEL_M
+
+    def measured_sphere_coverage(
+        self, centers: np.ndarray, radii: np.ndarray, *, min_range_m: float, since_s: float,
+    ) -> np.ndarray:
+        """Return the supporting exposure for each sphere, or NaN when unobserved.
+
+        Project each full sphere into the calibrated image. Every pixel in the
+        conservative projection rectangle must establish free space past its farthest point.
+        The aircraft's previously occupied body neighbourhood does not enter this test.
+        """
+        evidence = np.full(len(centers), np.nan)
+        for stamp, origin, R_wc, K, depth, _ in reversed(self.frames):
+            if stamp < since_s:
+                break
+            unseen = np.flatnonzero(np.isnan(evidence))
+            if unseen.size == 0:
+                break
+            local = (centers[unseen] - origin) @ R_wc
+            radius = radii[unseen]
+            fx, fy, cx, cy = K
+            x, y, z = local.T
+            depth_ok = (x - radius > min_range_m) & (x + radius < self.max_range - 1.0)
+            for i in np.flatnonzero(depth_ok):
+                # Tangent-ray extrema of y/x and z/x on the sphere.
+                denom = x[i] ** 2 - radius[i] ** 2
+                y_span = radius[i] * np.sqrt(denom + y[i] ** 2)
+                z_span = radius[i] * np.sqrt(denom + z[i] ** 2)
+                u0 = int(np.floor(cx - fx * (x[i] * y[i] + y_span) / denom))
+                u1 = int(np.ceil(cx - fx * (x[i] * y[i] - y_span) / denom))
+                v0 = int(np.floor(cy - fy * (x[i] * z[i] + z_span) / denom))
+                v1 = int(np.ceil(cy - fy * (x[i] * z[i] - z_span) / denom))
+                if not (2 <= u0 <= u1 < depth.shape[1] - 2 and 2 <= v0 <= v1 < depth.shape[0] - 2):
+                    continue
+                if np.min(depth[v0:v1 + 1, u0:u1 + 1]) > x[i] + radius[i] + 0.6:
+                    evidence[unseen[i]] = stamp
+        return evidence
 
     def min_distance(self, pts):
         pts = np.asarray(pts).reshape(-1, 3)

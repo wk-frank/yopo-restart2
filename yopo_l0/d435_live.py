@@ -28,6 +28,17 @@ class InterpolatedState:
     rotation_enu_flu: np.ndarray
 
 
+def _interpolate_pose(before: InterpolatedState, after: InterpolatedState, stamp_s: float) -> InterpolatedState:
+    alpha = (stamp_s - before.stamp_s) / (after.stamp_s - before.stamp_s)
+    return InterpolatedState(
+        stamp_s,
+        (1.0 - alpha) * before.position_enu + alpha * after.position_enu,
+        (1.0 - alpha) * before.velocity_enu + alpha * after.velocity_enu,
+        (1.0 - alpha) * before.acceleration_enu + alpha * after.acceleration_enu,
+        _orthonormalize((1.0 - alpha) * before.rotation_enu_flu + alpha * after.rotation_enu_flu),
+    )
+
+
 class PoseRingBuffer:
     """Monotonic-clock pose history for interpolating vehicle state at camera exposure time.
 
@@ -68,7 +79,7 @@ class PoseRingBuffer:
         v = np.asarray(velocity_enu, dtype=float).reshape(3)
         a = np.zeros(3) if acceleration_enu is None else np.asarray(acceleration_enu, dtype=float).reshape(3)
         R = np.asarray(rotation_enu_flu, dtype=float).reshape(3, 3)
-        if not (math.isfinite(t) and np.isfinite(p).all() and np.isfinite(v).all() and np.isfinite(R).all()):
+        if not (math.isfinite(t) and all(np.isfinite(x).all() for x in (p, v, a, R))):
             self.invalid_reason = "NONFINITE_STATE"
             return False
         if self._rows:
@@ -91,6 +102,23 @@ class PoseRingBuffer:
         if len(self._rows) > self.max_samples:
             self._rows = self._rows[-self.max_samples :]
         return self.valid
+
+    @property
+    def latest(self) -> InterpolatedState | None:
+        return self._rows[-1] if self.valid else None
+
+    def bracketed_exposure(
+        self, exposure_stamp_s: float, *, error_s: float = 0.0,
+    ) -> tuple[InterpolatedState, InterpolatedState, InterpolatedState] | None:
+        """Interpolate between distinct samples bracketing the whole exposure uncertainty."""
+        if not self.valid or not math.isfinite(exposure_stamp_s) or not math.isfinite(error_s) or error_s < 0:
+            return None
+        lo, hi = exposure_stamp_s - error_s, exposure_stamp_s + error_s
+        before = next((pose for pose in reversed(self._rows) if pose.stamp_s < lo), None)
+        after = next((pose for pose in self._rows if pose.stamp_s > hi), None)
+        if before is None or after is None or after.stamp_s - before.stamp_s > self.max_time_gap_s:
+            return None
+        return _interpolate_pose(before, after, exposure_stamp_s), before, after
 
     def at_exposure(self, exposure_stamp_s: float, *, max_extrapolation_s: float = 0.025) -> InterpolatedState | None:
         if not self.valid:
@@ -120,13 +148,7 @@ class PoseRingBuffer:
         for i in range(len(self._rows) - 1):
             a, b = self._rows[i], self._rows[i + 1]
             if a.stamp_s <= t <= b.stamp_s:
-                span = b.stamp_s - a.stamp_s
-                alpha = 0.0 if span <= 1e-9 else (t - a.stamp_s) / span
-                p = (1.0 - alpha) * a.position_enu + alpha * b.position_enu
-                v = (1.0 - alpha) * a.velocity_enu + alpha * b.velocity_enu
-                acc = (1.0 - alpha) * a.acceleration_enu + alpha * b.acceleration_enu
-                R = _orthonormalize((1.0 - alpha) * a.rotation_enu_flu + alpha * b.rotation_enu_flu)
-                return InterpolatedState(t, p, v, acc, R)
+                return _interpolate_pose(a, b, t)
         return None
 
 
